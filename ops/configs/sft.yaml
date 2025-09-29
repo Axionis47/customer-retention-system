@@ -1,0 +1,21 @@
+# Supervised Fine-Tuning configuration
+
+model_name: "gpt2"  # Use small model for demo; replace with larger model in production
+data_path: "tests/fixtures/tiny_pairs.jsonl"
+output_dir: "checkpoints/sft"
+
+# QLoRA settings
+load_in_8bit: false  # Set to true for real QLoRA with large models
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+target_modules: ["c_attn"]  # GPT-2 specific; adjust for other models
+
+# Training
+num_epochs: 3
+batch_size: 4
+learning_rate: 0.0002
+max_length: 256
+logging_steps: 10
+save_steps: 100
+

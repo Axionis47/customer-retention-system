@@ -1,0 +1,4 @@
+{"prompt": "Generate retention message for 12 month customer. Offer: 10%", "chosen": "Thank you for 12 months with us! Enjoy 10% off for 3 months.", "rejected": "URGENT! 10% off NOW or lose it!", "response": "Thank you for 12 months with us! Enjoy 10% off for 3 months."}
+{"prompt": "Generate retention message for 24 month customer. Offer: 20%", "chosen": "As a valued long-term customer, we offer you 20% off for 3 months.", "rejected": "Last chance! 20% discount expires immediately!", "response": "As a valued long-term customer, we offer you 20% off for 3 months."}
+{"prompt": "Generate retention message for 6 month customer. Offer: 5%", "chosen": "We appreciate your loyalty. Enjoy 5% off your next 3 months!", "rejected": "Don't miss out! 5% off but act now!", "response": "We appreciate your loyalty. Enjoy 5% off your next 3 months!"}
+

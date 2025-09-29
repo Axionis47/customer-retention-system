@@ -1,0 +1,18 @@
+# Example Terraform variables
+# Copy this file to terraform.tfvars and fill in your values
+
+project_id   = "your-gcp-project-id"
+region       = "us-central1"
+environment  = "dev"
+
+# GCS bucket names (must be globally unique)
+data_bucket  = "your-project-churn-data"
+model_bucket = "your-project-churn-models"
+log_bucket   = "your-project-churn-logs"
+
+# Artifact Registry
+ar_repo_name = "churn-saver-repo"
+
+# Cloud Run service
+service_name = "churn-retain-api"
+

@@ -1,0 +1,22 @@
+# PPO text generation configuration
+
+model_name: "gpt2"
+sft_model_path: "checkpoints/sft/sft_model"
+data_path: "tests/fixtures/tiny_pairs.jsonl"
+output_dir: "checkpoints/ppo_text"
+
+# PPO settings
+num_epochs: 2
+batch_size: 4
+mini_batch_size: 2
+ppo_epochs: 4
+learning_rate: 0.00005
+
+# KL control
+init_beta: 0.1
+target_kl: 0.01
+
+# Generation
+max_new_tokens: 100
+logging_steps: 5
+

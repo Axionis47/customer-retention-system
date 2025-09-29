@@ -1,0 +1,26 @@
+# PPO decision policy configuration
+
+seed: 42
+output_dir: checkpoints
+
+env:
+  episode_length: 100
+  initial_budget: 1000.0
+  cooldown_days: 7
+  fatigue_cap: 3
+  lambda_compliance: 10.0
+  lambda_fatigue: 5.0
+
+ppo:
+  num_episodes: 100
+  hidden_dim: 128
+  learning_rate: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_epsilon: 0.2
+  value_coef: 0.5
+  entropy_coef: 0.01
+  max_grad_norm: 0.5
+  update_epochs: 4
+  lagrangian_step_size: 0.01
+

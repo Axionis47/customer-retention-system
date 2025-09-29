@@ -1,0 +1,31 @@
+# Training image with GPU support
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
+
+# Alternative CPU-only base (uncomment for CPU training)
+# FROM python:3.11-slim
+
+WORKDIR /workspace
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY pyproject.toml ./
+
+# Install Python dependencies (including dev)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e ".[dev]"
+
+# Copy all code
+COPY . .
+
+# Create directories
+RUN mkdir -p checkpoints data models/risk_accept/artifacts
+
+# Default command (can be overridden)
+CMD ["bash"]
+

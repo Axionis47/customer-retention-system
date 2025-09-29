@@ -1,0 +1,13 @@
+# Reward Model configuration
+
+model_name: "distilbert-base-uncased"  # Smaller model for demo
+data_path: "tests/fixtures/tiny_pairs.jsonl"
+output_dir: "checkpoints/rm"
+
+# Training
+num_epochs: 3
+batch_size: 8
+learning_rate: 0.00005
+max_length: 256
+margin: 0.0  # Bradley-Terry margin
+

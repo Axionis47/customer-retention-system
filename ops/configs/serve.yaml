@@ -1,0 +1,21 @@
+# Serving configuration
+
+# Model paths (local or GCS)
+ppo_policy_path: "checkpoints/ppo_policy.pth"
+rlhf_model_path: "checkpoints/ppo_text_model"
+
+# GCS settings
+use_gcs: false
+gcs_model_bucket: ""  # Set via env var GCS_MODEL_BUCKET
+
+# Inference
+quantize: true
+timeout_seconds: 5
+
+# Fallback
+force_baseline: false  # Set via env var FORCE_BASELINE
+baseline_threshold: 0.7
+
+# Safety
+safety_rules_path: "rlhf/safety/rules.yaml"
+

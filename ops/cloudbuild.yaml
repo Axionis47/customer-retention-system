@@ -1,0 +1,169 @@
+# Cloud Build CI/CD pipeline
+substitutions:
+  _ENV: 'dev'
+  _REGION: 'us-central1'
+  _SERVICE_NAME: 'churn-retain-api'
+  _AR_REPO: 'churn-saver-repo'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # Step 1: Install dependencies and run linters
+  - name: 'python:3.11-slim'
+    id: 'lint'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install --no-cache-dir -e ".[dev]"
+        echo "Running ruff..."
+        ruff check . || exit 1
+        echo "Running mypy..."
+        mypy . || exit 1
+        echo "✓ Linting passed"
+
+  # Step 2: Run unit tests with coverage
+  - name: 'python:3.11-slim'
+    id: 'test-unit'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install --no-cache-dir -e ".[dev]"
+        echo "Running unit tests..."
+        pytest tests/unit/ -v --cov=env --cov=agents --cov=serve --cov=models --cov=rlhf --cov=eval \
+          --cov-report=term-missing --cov-report=xml --cov-fail-under=80 || exit 1
+        echo "✓ Unit tests passed"
+
+  # Step 3: Run integration tests
+  - name: 'python:3.11-slim'
+    id: 'test-integration'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install --no-cache-dir -e ".[dev]"
+        echo "Running integration tests..."
+        pytest tests/integration/ -v || exit 1
+        echo "✓ Integration tests passed"
+
+  # Step 4: Run contract tests
+  - name: 'python:3.11-slim'
+    id: 'test-contract'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install --no-cache-dir -e ".[dev]"
+        echo "Running contract tests..."
+        pytest tests/contract/ -v || exit 1
+        echo "✓ Contract tests passed"
+
+  # Step 5: Build app Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-app'
+    args:
+      - 'build'
+      - '-f'
+      - 'ops/docker/Dockerfile.app'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/app:$SHORT_SHA'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/app:latest'
+      - '.'
+
+  # Step 6: Build trainer Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-trainer'
+    args:
+      - 'build'
+      - '-f'
+      - 'ops/docker/Dockerfile.trainer'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/trainer:$SHORT_SHA'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/trainer:latest'
+      - '.'
+
+  # Step 7: Scan app image for vulnerabilities (using trivy)
+  - name: 'aquasec/trivy:latest'
+    id: 'scan-app'
+    args:
+      - 'image'
+      - '--exit-code'
+      - '0'  # Don't fail on vulnerabilities (change to 1 for strict)
+      - '--severity'
+      - 'HIGH,CRITICAL'
+      - '--no-progress'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/app:$SHORT_SHA'
+
+  # Step 8: Push images to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-app'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/app'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-trainer'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/trainer'
+
+  # Step 9: Deploy to Cloud Run (dev environment)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-cloud-run'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud run deploy ${_SERVICE_NAME}-${_ENV} \
+          --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/app:$SHORT_SHA \
+          --region=${_REGION} \
+          --platform=managed \
+          --allow-unauthenticated \
+          --memory=2Gi \
+          --cpu=1 \
+          --min-instances=0 \
+          --max-instances=10 \
+          --timeout=60 \
+          --set-env-vars="GCS_MODEL_BUCKET=gs://$PROJECT_ID-churn-models,FORCE_BASELINE=false" \
+          --service-account=app-runtime@$PROJECT_ID.iam.gserviceaccount.com
+
+  # Step 10: Run E2E smoke test against deployed service
+  - name: 'python:3.11-slim'
+    id: 'test-e2e'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install --no-cache-dir requests
+        SERVICE_URL=$(gcloud run services describe ${_SERVICE_NAME}-${_ENV} \
+          --region=${_REGION} --format='value(status.url)')
+        
+        echo "Testing deployed service at $SERVICE_URL"
+        
+        # Health check
+        curl -f $SERVICE_URL/healthz || exit 1
+        
+        # Retain endpoint
+        curl -f -X POST $SERVICE_URL/retain \
+          -H "Content-Type: application/json" \
+          -d '{"customer_id":"C12345","churn_risk":0.75,"tenure_months":24,"monthly_spend":89.99}' \
+          || exit 1
+        
+        echo "✓ E2E smoke test passed"
+
+# Images to push
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/app:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/app:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/trainer:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/trainer:latest'
+
+timeout: '1800s'  # 30 minutes
+

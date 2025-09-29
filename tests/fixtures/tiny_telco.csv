@@ -1,0 +1,7 @@
+customer_id,tenure_months,monthly_spend,support_tickets,contract_type,churned
+C00001,12,89.99,1,month-to-month,0
+C00002,3,45.50,5,month-to-month,1
+C00003,24,120.00,0,one-year,0
+C00004,6,65.00,3,month-to-month,1
+C00005,36,150.00,1,two-year,0
+

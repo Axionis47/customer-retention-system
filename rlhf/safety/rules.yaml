@@ -1,0 +1,30 @@
+# Safety rules for message generation
+
+banned_phrases:
+  - "guarantee refund"
+  - "guaranteed"
+  - "illegal"
+  - "100% money back"
+  - "risk-free"
+  - "no questions asked"
+  - "sue"
+  - "lawsuit"
+  - "free forever"
+
+max_length: 200  # characters
+
+min_length: 20  # characters
+
+quiet_hours:
+  start: 22  # 10 PM
+  end: 8     # 8 AM
+
+toxicity_threshold: 0.7  # Placeholder for toxicity classifier
+
+required_elements:
+  - "offer"  # Must mention the offer/discount
+
+forbidden_patterns:
+  - "\\d{3}-\\d{2}-\\d{4}"  # SSN pattern
+  - "\\d{16}"  # Credit card pattern
+
