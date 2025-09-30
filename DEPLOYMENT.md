@@ -1,16 +1,16 @@
 # Deployment Guide
 
-This guide walks through deploying the Churn-Saver RLHF+PPO system to Google Cloud Platform.
+How to deploy the Churn-Saver system to Google Cloud Platform.
 
-## Prerequisites
+## What You Need
 
-1. **GCP Project**: Active GCP project with billing enabled
-2. **Tools Installed**:
-   - `gcloud` CLI (authenticated)
+1. **GCP Project**: GCP project with billing turned on
+2. **Tools**:
+   - `gcloud` CLI (logged in)
    - `terraform` >= 1.5
    - `docker`
    - `make`
-3. **APIs Enabled**: The Terraform will enable required APIs, but you can pre-enable:
+3. **APIs**: Terraform will enable these, but you can do it first:
    ```bash
    gcloud services enable \
      run.googleapis.com \
@@ -20,16 +20,16 @@ This guide walks through deploying the Churn-Saver RLHF+PPO system to Google Clo
      storage.googleapis.com
    ```
 
-## Step 1: Infrastructure Setup
+## Step 1: Setup Infrastructure
 
-### 1.1 Configure Terraform Variables
+### 1.1 Set Terraform Variables
 
 ```bash
 cd ops/terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Edit `terraform.tfvars` with your values:
+Edit `terraform.tfvars` with your details:
 ```hcl
 project_id   = "my-gcp-project"
 region       = "us-central1"
@@ -40,7 +40,7 @@ model_bucket = "my-project-churn-models"
 log_bucket   = "my-project-churn-logs"
 ```
 
-### 1.2 Initialize and Apply Terraform
+### 1.2 Run Terraform
 
 ```bash
 terraform init
@@ -50,21 +50,21 @@ terraform apply
 
 This creates:
 - 3 GCS buckets (data, models, logs)
-- Artifact Registry repository
+- Artifact Registry for Docker images
 - Service accounts (app-runtime, ci-builder)
-- IAM bindings
-- Secret Manager secrets
-- Cloud Run service (initial deployment)
+- IAM permissions
+- Secret Manager
+- Cloud Run service
 - Monitoring alerts
 
-Save the outputs:
+Save outputs:
 ```bash
 terraform output > ../../terraform-outputs.txt
 ```
 
-## Step 2: Prepare Training Data
+## Step 2: Prepare Data
 
-### 2.1 Generate Synthetic Data (for testing)
+### 2.1 Create Test Data
 
 ```bash
 make prepare-data
@@ -82,7 +82,7 @@ export GCS_DATA_BUCKET=$(terraform output -raw data_bucket_name)
 make upload-data
 ```
 
-Or manually:
+Or do it manually:
 ```bash
 gsutil -m cp -r data/* gs://${GCS_DATA_BUCKET}/
 ```
@@ -173,23 +173,23 @@ curl -X POST http://localhost:8080/retain \
   -d '{"customer_id":"C123","churn_risk":0.75,"tenure_months":24,"monthly_spend":89.99}'
 ```
 
-### 5.2 Deploy via Cloud Build
+### 5.2 Deploy with Cloud Build
 
 ```bash
-# Trigger Cloud Build
+# Start Cloud Build
 gcloud builds submit \
   --config ops/cloudbuild.yaml \
   --substitutions=_ENV=dev,_REGION=us-central1
 ```
 
 This will:
-1. Run linters (ruff, mypy)
-2. Run all tests with coverage
+1. Check code quality (ruff, mypy)
+2. Run all tests
 3. Build Docker images
-4. Scan for vulnerabilities
+4. Scan for security issues
 5. Push to Artifact Registry
 6. Deploy to Cloud Run
-7. Run E2E smoke tests
+7. Run smoke tests
 
 ### 5.3 Manual Deployment
 
@@ -314,22 +314,22 @@ terraform destroy
 
 ## Production Checklist
 
-Before going to production:
+Before going live:
 
-- [ ] Replace synthetic data with real data
+- [ ] Use real data instead of test data
 - [ ] Train models on full dataset
-- [ ] Run full evaluation suite
-- [ ] Set up proper monitoring dashboards
-- [ ] Configure alerting channels (email, Slack, PagerDuty)
-- [ ] Enable authentication on Cloud Run
-- [ ] Set up proper IAM roles (remove allUsers invoker)
-- [ ] Configure VPC connector if needed
-- [ ] Set up CI/CD triggers on git push
-- [ ] Document runbooks for common issues
-- [ ] Set up backup/restore procedures
-- [ ] Configure budget alerts
+- [ ] Run all evaluation tests
+- [ ] Setup monitoring dashboards
+- [ ] Setup alerts (email, Slack, PagerDuty)
+- [ ] Add authentication to Cloud Run
+- [ ] Fix IAM roles (remove public access)
+- [ ] Add VPC connector if needed
+- [ ] Setup CI/CD on git push
+- [ ] Write runbooks for common problems
+- [ ] Setup backup and restore
+- [ ] Add budget alerts
 - [ ] Run load tests
-- [ ] Set up A/B testing framework
-- [ ] Configure proper logging retention
-- [ ] Set up Terraform remote state in GCS
+- [ ] Setup A/B testing
+- [ ] Set log retention policy
+- [ ] Move Terraform state to GCS
 

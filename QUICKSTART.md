@@ -1,26 +1,26 @@
-# Quick Start Guide
+# Quick Start
 
-Get the Churn-Saver RLHF+PPO system running in 5 minutes.
+Get the system running in 5 minutes.
 
-## Prerequisites
+## What You Need
 
 - Python 3.11+
-- Docker (optional, for containerized deployment)
-- GCP account (optional, for cloud deployment)
+- Docker (optional, for containers)
+- GCP account (optional, for cloud)
 
-## Local Development
+## Local Setup
 
-### 1. Clone and Setup
+### 1. Clone and Install
 
 ```bash
-# Clone the repository
+# Clone repo
 git clone <your-repo-url>
 cd churn-saver-rlhf-ppo
 
-# Create virtual environment and install dependencies
+# Install
 make setup
 
-# Or manually:
+# Or do it manually:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -29,24 +29,24 @@ pip install -e ".[dev]"
 ### 2. Run Tests
 
 ```bash
-# Run all tests
+# All tests
 make test
 
-# Or run specific test suites
+# Specific tests
 pytest tests/unit/ -v
 pytest tests/integration/ -v
 pytest tests/contract/ -v
 ```
 
-Expected output: **46 tests passed** ✓
+You should see: **46 tests passed**
 
-### 3. Generate Synthetic Data
+### 3. Create Test Data
 
 ```bash
-# Generate test data
+# Make test data
 make prepare-data
 
-# This creates:
+# Creates:
 # - data/churn_train.csv
 # - data/accept_train.csv
 # - data/rlhf_pairs.jsonl
@@ -59,36 +59,36 @@ make prepare-data
 make train-risk
 make train-accept
 
-# Train PPO policy
+# Train PPO
 make train-ppo
 
-# Train RLHF models (requires GPU for best performance)
+# Train RLHF (needs GPU for speed)
 make train-sft
 make train-rm
 make train-ppo-text
 ```
 
-**Note**: Training is optional. The service will use baseline policies if models aren't available.
+**Note**: Training is optional. Service works with baseline policies if models are not there.
 
-### 5. Run the Service Locally
+### 5. Run Service
 
 ```bash
-# Start the FastAPI server
+# Start server
 make serve
 
 # Or manually:
 uvicorn serve.app:app --reload --port 8080
 ```
 
-The service will be available at `http://localhost:8080`
+Service runs at `http://localhost:8080`
 
-### 6. Test the API
+### 6. Test API
 
 ```bash
-# Health check
+# Check health
 curl http://localhost:8080/healthz
 
-# Get retention decision
+# Get decision
 curl -X POST http://localhost:8080/retain \
   -H "Content-Type: application/json" \
   -d '{
@@ -101,7 +101,7 @@ curl -X POST http://localhost:8080/retain \
   }'
 ```
 
-Expected response:
+Response:
 ```json
 {
   "customer_id": "C12345",
@@ -225,11 +225,11 @@ churn-saver-rlhf-ppo/
 └── data/             # Training data
 ```
 
-## Troubleshooting
+## Common Problems
 
 ### Tests fail with import errors
 ```bash
-# Reinstall in editable mode
+# Reinstall
 pip install -e .
 ```
 
@@ -245,39 +245,39 @@ uvicorn serve.app:app --reload
 
 ### Models not loading
 ```bash
-# Verify model files exist
+# Check if files exist
 ls -la checkpoints/
 ls -la models/risk_accept/artifacts/
 
-# Use baseline policy
+# Use baseline
 export FORCE_BASELINE=true
 ```
 
 ### Docker build fails
 ```bash
-# Check Docker daemon is running
+# Check Docker is running
 docker ps
 
-# Build with verbose output
+# Build with details
 docker build -f ops/docker/Dockerfile.app -t churn-saver-app . --progress=plain
 ```
 
 ## Next Steps
 
-1. **Read the docs**: See [README.md](README.md) for architecture details
+1. **Read docs**: See [README.md](README.md) for details
 2. **Deploy to GCP**: Follow [DEPLOYMENT.md](DEPLOYMENT.md)
-3. **Review the code**: Check [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)
-4. **Customize**: Modify configs in `ops/configs/`
-5. **Train on real data**: Replace synthetic data with production data
+3. **Check code**: See [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)
+4. **Change settings**: Edit configs in `ops/configs/`
+5. **Use real data**: Replace test data with actual data
 
 ## Support
 
-For issues or questions:
-- Check the documentation in this repository
-- Review test files for usage examples
-- Open a GitHub issue
+For help:
+- Check docs in this repo
+- Look at test files for examples
+- Open GitHub issue
 
 ## License
 
-MIT (or your preferred license)
+MIT
 

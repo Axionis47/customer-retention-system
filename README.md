@@ -1,11 +1,13 @@
 # Churn-Saver RLHF+PPO
 
-Production-grade churn retention system combining:
-- **PPO decision policy** for optimal contact timing, offer selection, and budget management
-- **RLHF message generation** (SFT → Reward Model → PPO) for personalized, policy-compliant retention messages
-- **Lagrangian constraints** for budget, cooldown, and fatigue management
-- **GCP-native deployment** with Cloud Run, Artifact Registry, Secret Manager, and Terraform IaC
-- **Comprehensive testing** with 90%+ coverage, CI/CD via Cloud Build
+A churn retention system that uses machine learning to decide when to contact customers and what offers to give them.
+
+What it does:
+- **PPO decision policy** - Decides when to contact, which offer to give, and manages budget
+- **RLHF message generation** - Creates personalized messages using SFT → Reward Model → PPO
+- **Lagrangian constraints** - Keeps budget, cooldown, and contact frequency under control
+- **GCP deployment** - Runs on Cloud Run with Terraform for infrastructure
+- **Testing** - 90%+ code coverage with automated CI/CD
 
 ## Architecture
 
@@ -45,12 +47,12 @@ Production-grade churn retention system combining:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Quickstart (Local)
+## Quick Start (Local)
 
-### Prerequisites
+### What you need
 - Python 3.11
-- Docker (for E2E tests and deployment)
-- GCP account with billing enabled (for deployment)
+- Docker (for tests and deployment)
+- GCP account with billing (for cloud deployment)
 
 ### Setup
 ```bash
@@ -59,16 +61,16 @@ make setup
 
 ### Run Tests
 ```bash
-make test          # All tests with coverage
-make test-unit     # Unit tests only
-make lint          # Ruff + mypy
+make test          # All tests
+make test-unit     # Only unit tests
+make lint          # Check code quality
 ```
 
-### Serve Locally
+### Run Locally
 ```bash
 make serve
-# API available at http://localhost:8080
-# Endpoints: /healthz, /readyz, /retain
+# API runs at http://localhost:8080
+# Available endpoints: /healthz, /readyz, /retain
 ```
 
 ### Test API
@@ -87,18 +89,18 @@ curl -X POST http://localhost:8080/retain \
   }'
 ```
 
-## Data Preparation
+## Preparing Data
 
-### Local Development
+### For Local Testing
 ```bash
-# Generate tiny demo datasets
+# Create small demo datasets
 python ops/scripts/prepare_data_local.py
 
-# Upload to GCS (requires GCP_PROJECT_ID, GCS_DATA_BUCKET env vars)
+# Upload to GCS (needs GCP_PROJECT_ID, GCS_DATA_BUCKET set)
 python ops/scripts/upload_to_gcs.py
 ```
 
-### Expected CSV Schema
+### Data Format
 
 **Churn training data** (`data/churn_train.csv`):
 - `customer_id`, `tenure_months`, `monthly_spend`, `support_tickets`, `contract_type`, `churned` (0/1)
@@ -109,27 +111,27 @@ python ops/scripts/upload_to_gcs.py
 **RLHF pairs** (`data/rlhf_pairs.jsonl`):
 - `{"prompt": "...", "chosen": "...", "rejected": "..."}`
 
-## Training Pipeline
+## Training Models
 
 ### 1. Risk & Acceptance Models
 ```bash
 make train-risk
-# Outputs: models/risk_accept/artifacts/{churn_model.pkl, accept_model.pkl, calibrator.pkl}
+# Creates: models/risk_accept/artifacts/{churn_model.pkl, accept_model.pkl, calibrator.pkl}
 ```
 
 ### 2. PPO Decision Policy
 ```bash
 make train-ppo
-# Trains PPO agent in retention environment with Lagrangian constraints
-# Outputs: checkpoints/ppo_policy_*.pth
+# Trains PPO agent with budget and contact constraints
+# Creates: checkpoints/ppo_policy_*.pth
 ```
 
 ### 3. RLHF Message Pipeline
 ```bash
-make train-sft       # Supervised fine-tuning
-make train-rm        # Reward model (Bradley-Terry)
-make train-ppo-text  # PPO with adaptive KL
-# Outputs: checkpoints/sft_model/, checkpoints/rm_model/, checkpoints/ppo_text_model/
+make train-sft       # Fine-tune base model
+make train-rm        # Train reward model
+make train-ppo-text  # Train PPO for text
+# Creates: checkpoints/sft_model/, checkpoints/rm_model/, checkpoints/ppo_text_model/
 ```
 
 ## GCP Deployment
@@ -206,70 +208,70 @@ gcloud run deploy ${SERVICE_NAME} \
 
 ## Configuration
 
-All hyperparameters in `ops/configs/*.yaml`:
-- `env.yaml`: Retention environment (episode length, constraints, reward weights)
-- `ppo.yaml`: PPO decision policy (learning rate, GAE lambda, clip epsilon)
-- `sft.yaml`: Supervised fine-tuning (LoRA rank, learning rate, epochs)
-- `rm.yaml`: Reward model (Bradley-Terry margin, batch size)
-- `ppo_text.yaml`: PPO text generation (KL target, adaptive beta, rollout length)
-- `serve.yaml`: API serving (timeout, quantization, fallback thresholds)
+All settings are in `ops/configs/*.yaml`:
+- `env.yaml`: Environment settings (episode length, budget limits, reward weights)
+- `ppo.yaml`: PPO settings (learning rate, GAE lambda, clip epsilon)
+- `sft.yaml`: Fine-tuning settings (LoRA rank, learning rate, epochs)
+- `rm.yaml`: Reward model settings (Bradley-Terry margin, batch size)
+- `ppo_text.yaml`: Text generation settings (KL target, beta, rollout length)
+- `serve.yaml`: API settings (timeout, quantization, fallback thresholds)
 
 ## Testing
 
-### Coverage Target: ≥90%
+### Target: 90% code coverage
 ```bash
 make test
-# Runs unit + integration + contract tests with coverage report
+# Runs all tests and shows coverage
 ```
 
-### E2E Docker Smoke Test
+### Docker Tests
 ```bash
 make docker-build
 make e2e
-# Builds images, starts container, hits /healthz and /retain
+# Builds images, starts container, tests /healthz and /retain
 ```
 
-### Test Categories
-- **Unit**: Reward math, constraints, Lagrangian, BT loss, KL adaptation, safety rules
-- **Integration**: Environment rollouts, PPO training, API endpoints, GCS loading
-- **Contract**: Golden policy outputs (deterministic seed)
+### Test Types
+- **Unit**: Reward calculations, constraints, Lagrangian, BT loss, KL adaptation, safety rules
+- **Integration**: Environment runs, PPO training, API endpoints, GCS loading
+- **Contract**: Fixed outputs with same seed
 - **E2E**: Docker smoke tests
 
-## Security & Compliance
+## Security
 
-- **Secrets**: All sensitive data in Secret Manager (never plaintext)
-- **IAM**: Least-privilege service accounts (CI builder, app runtime)
-- **Image Scanning**: Trivy vulnerability scan in CI/CD
-- **Kill Switch**: `FORCE_BASELINE=true` disables ML models, falls back to simple propensity threshold
-- **Safety Shield**: Blocks banned phrases, excessive length, quiet-hour violations
+- **Secrets**: All passwords and tokens stored in Secret Manager (not in code)
+- **IAM**: Service accounts with minimum required permissions
+- **Image Scanning**: Trivy checks for vulnerabilities in CI/CD
+- **Kill Switch**: Set `FORCE_BASELINE=true` to disable ML models and use simple rules
+- **Safety Shield**: Blocks bad phrases, too long messages, and messages during quiet hours
 
-## Monitoring & SLOs
+## Monitoring
 
-Terraform provisions:
-- **Log-based metrics**: 5xx rate, p95 latency, safety violations
-- **Alerts**: Email/Slack on SLO breach
-- **Dashboards**: Cloud Monitoring for request volume, error rate, model scores
+Terraform sets up:
+- **Metrics**: 5xx errors, latency, safety violations
+- **Alerts**: Email/Slack when things go wrong
+- **Dashboards**: Cloud Monitoring for requests, errors, model performance
 
-**Target SLOs**:
+**Targets**:
 - Availability: 99.5%
-- p95 latency: <500ms
-- Safety violation rate: <0.1%
+- p95 latency: under 500ms
+- Safety violations: under 0.1%
 
-## Cost Optimization
+## Cost
 
-- **Cloud Run**: Min instances=0 (scale to zero), max=10
-- **Model quantization**: 8-bit inference (bitsandbytes)
-- **GCS lifecycle**: Archive logs >90 days, delete >365 days
-- **Spot instances**: Use for training jobs (not implemented in v0.1)
+- **Cloud Run**: Scales to zero when not used, max 10 instances
+- **Model quantization**: Uses 8-bit to save memory
+- **GCS lifecycle**: Archives old logs after 90 days, deletes after 365 days
+- **Spot instances**: Can use for training (not added yet)
 
-### Estimated Monthly Cost (dev)
-- Cloud Run: ~$5-20 (low traffic)
-- GCS: ~$1-5 (small datasets)
-- Artifact Registry: ~$0.10/GB
-- Secret Manager: ~$0.06/secret/month
-- **Total**: ~$10-30/month for dev environment
+### Monthly Cost (dev environment)
+- Cloud Run: $5-20 (low traffic)
+- GCS: $1-5 (small datasets)
+- Artifact Registry: $0.10/GB
+- Secret Manager: $0.06/secret/month
+- **Total**: Around $10-30/month for dev
 
-## Teardown
+## Cleanup
 
 ```bash
 cd ops/terraform
@@ -277,20 +279,20 @@ terraform destroy \
   -var="project_id=${GCP_PROJECT_ID}" \
   -var="region=${GCP_REGION}"
 
-# Manually delete:
+# Delete manually:
 # - Cloud Build history
-# - Container images in Artifact Registry (if desired)
+# - Container images in Artifact Registry (if you want)
 ```
 
-## Development Workflow
+## Development Process
 
-1. **Feature branch**: `git checkout -b feature/my-feature`
+1. **Create branch**: `git checkout -b feature/my-feature`
 2. **Make changes**: Edit code, add tests
-3. **Local validation**: `make lint && make test`
+3. **Check locally**: `make lint && make test`
 4. **Commit**: Pre-commit hooks run automatically
 5. **Push**: `git push origin feature/my-feature`
-6. **PR**: Cloud Build runs full CI pipeline
-7. **Merge**: Auto-deploy to dev environment
+6. **PR**: Cloud Build runs all checks
+7. **Merge**: Deploys to dev automatically
 
 ## Troubleshooting
 
