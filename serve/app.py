@@ -1,11 +1,10 @@
 """FastAPI serving application for churn retention."""
 import logging
 import os
-import time
 from typing import Dict, Optional
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from serve.policy_loader import PolicyLoader
@@ -74,30 +73,43 @@ async def startup_event():
     logger.info("Startup complete")
 
 
-class CustomerRequest(BaseModel):
-    """Request schema for retention endpoint."""
-
-    customer_id: str = Field(..., description="Unique customer identifier")
-    churn_risk: float = Field(..., ge=0, le=1, description="Churn risk probability")
-    tenure_months: int = Field(..., ge=0, description="Months as customer")
-    monthly_spend: float = Field(..., ge=0, description="Average monthly spend")
-    contacts_last_7d: int = Field(default=0, ge=0, description="Contacts in last 7 days")
-    days_since_last_contact: int = Field(default=30, ge=0, description="Days since last contact")
-    cooldown_left: int = Field(default=0, ge=0, description="Cooldown days remaining")
-    discount_budget_left: float = Field(default=1.0, ge=0, le=1, description="Budget remaining (normalized)")
+class PolicyOverrides(BaseModel):
+    """Policy override options."""
+    force_baseline: bool = False
 
 
-class RetentionResponse(BaseModel):
-    """Response schema for retention endpoint."""
+class RetainRequest(BaseModel):
+    """Request schema for /retain endpoint."""
+    customer_facts: Dict = Field(..., description="Arbitrary customer key/value pairs")
+    policy_overrides: Optional[PolicyOverrides] = None
+    debug: bool = False
 
-    customer_id: str
-    decision: str  # "contact" or "no_contact"
-    offer_pct: float
-    delay_days: int
-    message: Optional[str] = None
-    safety_flags: list = []
-    using_baseline: bool = False
-    latency_ms: float
+
+class DecisionOutput(BaseModel):
+    """Decision output schema."""
+    contact: bool
+    offer_level: int = Field(..., ge=0, le=3)
+    followup_days: int = Field(..., ge=0)
+
+
+class ScoresOutput(BaseModel):
+    """Model scores output schema."""
+    p_churn: float = Field(..., ge=0, le=1)
+    p_accept: list[float] = Field(..., description="Acceptance probabilities for offer levels 0-3")
+
+
+class SafetyOutput(BaseModel):
+    """Safety check output schema."""
+    violations: int = 0
+    applied_disclaimers: list[str] = []
+
+
+class RetainResponse(BaseModel):
+    """Response schema for /retain endpoint."""
+    decision: DecisionOutput
+    scores: ScoresOutput
+    message: str
+    safety: SafetyOutput
 
 
 @app.get("/healthz")
@@ -126,91 +138,118 @@ async def readiness_check():
     }
 
 
-@app.post("/retain", response_model=RetentionResponse)
-async def retain_customer(request: CustomerRequest, http_request: Request):
+@app.post("/retain", response_model=RetainResponse)
+async def retain_customer(request: RetainRequest):
     """
     Main retention endpoint.
 
     Args:
-        request: Customer context
+        request: Customer facts and policy overrides
 
     Returns:
-        Retention decision and message
+        Retention decision, scores, message, and safety info
     """
-    start_time = time.time()
-
     if policy_loader is None:
         raise HTTPException(status_code=503, detail="Policy loader not initialized")
 
     try:
-        # Build observation
-        obs = {
-            "churn_risk": np.array([request.churn_risk], dtype=np.float32),
-            "accept_prob_0": np.array([0.1], dtype=np.float32),  # Placeholder
-            "accept_prob_1": np.array([0.3], dtype=np.float32),
-            "accept_prob_2": np.array([0.5], dtype=np.float32),
-            "accept_prob_3": np.array([0.7], dtype=np.float32),
-            "days_since_last_contact": np.array([request.days_since_last_contact], dtype=np.float32),
-            "contacts_last_7d": np.array([request.contacts_last_7d], dtype=np.float32),
-            "cooldown_left": np.array([request.cooldown_left], dtype=np.float32),
-            "discount_budget_left": np.array([request.discount_budget_left], dtype=np.float32),
-        }
+        facts = request.customer_facts
+        overrides = request.policy_overrides or PolicyOverrides()
+        use_baseline = overrides.force_baseline or force_baseline
 
-        # Predict action
-        action = policy_loader.predict_action(obs)
-        contact, offer_idx, delay_idx = action
+        # Extract or compute scores
+        # In production, these would come from risk/acceptance models
+        p_churn = facts.get("churn_risk", 0.5)
+        if not (0 <= p_churn <= 1):
+            p_churn = 0.5
 
-        # Map to values
-        offers = [0.0, 0.05, 0.10, 0.20]
-        delays = [0, 1, 3]
+        # Compute acceptance probabilities for each offer level
+        # Stub: higher offers = higher acceptance
+        base_accept = 0.1
+        p_accept = [
+            base_accept,
+            base_accept + 0.1,
+            base_accept + 0.2,
+            base_accept + 0.3,
+        ]
 
-        offer_pct = offers[offer_idx]
-        delay_days = delays[delay_idx]
-
-        # Generate message if contacting
-        message = None
-        safety_flags = []
-
-        if contact == 1:
-            customer_context = {
-                "tenure_months": request.tenure_months,
-                "monthly_spend": request.monthly_spend,
-                "churn_risk": request.churn_risk,
+        # Decision policy
+        if use_baseline:
+            # Baseline: simple threshold
+            contact = p_churn > 0.4
+            offer_level = 2 if p_churn > 0.6 else 1
+            followup_days = 7
+        else:
+            # Use learned policy (stub for now)
+            obs = {
+                "churn_risk": np.array([p_churn], dtype=np.float32),
+                "accept_prob_0": np.array([p_accept[0]], dtype=np.float32),
+                "accept_prob_1": np.array([p_accept[1]], dtype=np.float32),
+                "accept_prob_2": np.array([p_accept[2]], dtype=np.float32),
+                "accept_prob_3": np.array([p_accept[3]], dtype=np.float32),
+                "days_since_last_contact": np.array([facts.get("days_since_last_contact", 30)], dtype=np.float32),
+                "contacts_last_7d": np.array([facts.get("contacts_last_7d", 0)], dtype=np.float32),
+                "cooldown_left": np.array([facts.get("cooldown_left", 0)], dtype=np.float32),
+                "discount_budget_left": np.array([facts.get("discount_budget_left", 1.0)], dtype=np.float32),
             }
 
+            action = policy_loader.predict_action(obs)
+            contact_int, offer_idx, delay_idx = action
+
+            contact = contact_int == 1
+            offer_level = offer_idx
+            followup_days = [3, 7, 14][delay_idx] if delay_idx < 3 else 7
+
+        # Generate message
+        if contact:
+            customer_context = {
+                "tenure_months": facts.get("tenure", facts.get("tenure_months", 12)),
+                "monthly_spend": facts.get("spend", facts.get("monthly_spend", 50.0)),
+                "churn_risk": p_churn,
+                "name": facts.get("name", "valued customer"),
+            }
+
+            offer_pct = [0.0, 0.05, 0.10, 0.20][offer_level]
             message = policy_loader.generate_message(customer_context, offer_pct)
 
             # Safety check
+            violations_list = []
+            disclaimers = []
+
             if safety_shield:
-                is_safe, violations, penalty = safety_shield.check_message(message)
+                is_safe, violations, _ = safety_shield.check_message(message)
                 if not is_safe:
-                    safety_flags = violations
-                    logger.warning(
-                        f"Safety violations for customer {request.customer_id}: {violations}"
-                    )
+                    violations_list = violations
+                    logger.warning(f"Safety violations: {violations}")
 
-        # Log decision
-        latency_ms = (time.time() - start_time) * 1000
-        logger.info(
-            f"Customer {request.customer_id}: "
-            f"decision={'contact' if contact == 1 else 'no_contact'}, "
-            f"offer={offer_pct * 100:.0f}%, "
-            f"latency={latency_ms:.1f}ms"
-        )
+                # Add disclaimers
+                disclaimers.append("Offer valid until end of month")
 
-        return RetentionResponse(
-            customer_id=request.customer_id,
-            decision="contact" if contact == 1 else "no_contact",
-            offer_pct=offer_pct,
-            delay_days=delay_days,
+        else:
+            message = ""
+            violations_list = []
+            disclaimers = []
+
+        # Build response
+        return RetainResponse(
+            decision=DecisionOutput(
+                contact=contact,
+                offer_level=offer_level,
+                followup_days=followup_days,
+            ),
+            scores=ScoresOutput(
+                p_churn=p_churn,
+                p_accept=p_accept,
+            ),
             message=message,
-            safety_flags=safety_flags,
-            using_baseline=policy_loader.use_baseline() or force_baseline,
-            latency_ms=latency_ms,
+            safety=SafetyOutput(
+                violations=len(violations_list),
+                applied_disclaimers=disclaimers,
+            ),
         )
 
     except Exception as e:
-        logger.error(f"Error processing request for {request.customer_id}: {e}")
+        logger.error(f"Error processing request: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

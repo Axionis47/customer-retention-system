@@ -2,7 +2,8 @@ PY=python3.11
 VENV=.venv
 ACTIVATE=. $(VENV)/bin/activate
 
-.PHONY: setup test lint docker-build e2e train-risk train-ppo train-sft train-rm train-ppo-text serve deploy clean
+.PHONY: setup test lint docker-build e2e train-risk train-ppo train-sft train-rm train-ppo-text serve deploy clean \
+        data.telco data.bank data.sft data.prefs data.all data.catalog
 
 setup:
 	$(PY) -m venv $(VENV)
@@ -29,6 +30,26 @@ lint:
 format:
 	$(ACTIVATE) && black .
 	$(ACTIVATE) && ruff check --fix .
+
+# Data pipeline targets
+data.telco:
+	$(ACTIVATE) && python data/processors/telco_processor.py
+
+data.bank:
+	$(ACTIVATE) && python data/processors/bank_processor.py
+
+data.sft:
+	$(ACTIVATE) && python data/processors/oasst1_processor.py
+
+data.prefs:
+	$(ACTIVATE) && python data/processors/preferences_processor.py
+
+data.all: data.telco data.bank data.sft data.prefs
+	@echo "✓ All datasets processed"
+	$(ACTIVATE) && python -c "from data.catalog_manager import DataCatalog; print(DataCatalog().summary())"
+
+data.catalog:
+	$(ACTIVATE) && python -c "from data.catalog_manager import DataCatalog; print(DataCatalog().summary())"
 
 docker-build:
 	docker build -f ops/docker/Dockerfile.app -t churn-saver-app:local .

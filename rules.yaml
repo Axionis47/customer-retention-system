@@ -1,0 +1,53 @@
+# Safety rules for retention messages
+
+# Disallowed phrases (case-insensitive)
+disallowed_phrases:
+  - "guaranteed refund"
+  - "100% money back"
+  - "risk-free"
+  - "no questions asked"
+  - "cancel anytime"
+  - "free forever"
+  - "unlimited"
+  - "act now"
+  - "urgent"
+  - "last chance"
+  - "expires today"
+  - "limited time only"
+  - "don't miss out"
+  - "exclusive offer"
+  - "you've been selected"
+  - "congratulations"
+  - "winner"
+  - "click here"
+  - "call now"
+
+# Required disclaimers
+required_disclaimers:
+  - "Offer valid until end of month"
+  - "Terms and conditions apply"
+
+# Text limits
+limits:
+  max_length: 500
+  min_length: 20
+
+# Quiet hours (no messages during these times)
+quiet_hours:
+  start: 22  # 10 PM
+  end: 8     # 8 AM
+  timezone: "UTC"
+
+# Tone requirements
+tone:
+  - "professional"
+  - "respectful"
+  - "no pressure"
+  - "customer-centric"
+
+# Required elements
+required_elements:
+  - "customer_name_or_greeting"  # Must address customer
+  - "offer_details"              # Must mention the offer
+  - "appreciation"               # Must thank customer
+

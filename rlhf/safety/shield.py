@@ -18,23 +18,40 @@ class SafetyShield:
         - Forbidden patterns (PII)
     """
 
-    def __init__(self, rules_path: str = "rlhf/safety/rules.yaml"):
+    def __init__(self, rules_path: str = "rules.yaml"):
         """Load safety rules."""
         rules_file = Path(rules_path)
         if rules_file.exists():
             with open(rules_file) as f:
                 self.rules = yaml.safe_load(f)
         else:
-            # Default rules
-            self.rules = {
-                "banned_phrases": ["guarantee refund", "illegal", "guaranteed"],
-                "max_length": 200,
-                "min_length": 20,
-                "quiet_hours": {"start": 22, "end": 8},
-                "toxicity_threshold": 0.7,
-                "required_elements": ["offer"],
-                "forbidden_patterns": [],
-            }
+            # Try alternate path
+            alt_path = Path("rlhf/safety/rules.yaml")
+            if alt_path.exists():
+                with open(alt_path) as f:
+                    self.rules = yaml.safe_load(f)
+            else:
+                # Default rules
+                self.rules = {
+                    "disallowed_phrases": ["guarantee refund", "illegal", "guaranteed"],
+                    "limits": {"max_length": 200, "min_length": 20},
+                    "quiet_hours": {"start": 22, "end": 8},
+                    "toxicity_threshold": 0.7,
+                    "required_elements": ["offer"],
+                    "forbidden_patterns": [],
+                }
+
+        # Normalize keys for backward compatibility
+        if "banned_phrases" in self.rules:
+            self.rules["disallowed_phrases"] = self.rules.pop("banned_phrases")
+        if "max_length" in self.rules:
+            if "limits" not in self.rules:
+                self.rules["limits"] = {}
+            self.rules["limits"]["max_length"] = self.rules.pop("max_length")
+        if "min_length" in self.rules:
+            if "limits" not in self.rules:
+                self.rules["limits"] = {}
+            self.rules["limits"]["min_length"] = self.rules.pop("min_length")
 
     def check_message(self, message: str, hour: int = 12) -> Tuple[bool, List[str], float]:
         """
@@ -53,19 +70,24 @@ class SafetyShield:
         penalty = 0.0
 
         # Length check
-        if len(message) > self.rules["max_length"]:
-            violations.append(f"Message too long ({len(message)} > {self.rules['max_length']})")
+        limits = self.rules.get("limits", {})
+        max_length = limits.get("max_length", 500)
+        min_length = limits.get("min_length", 20)
+
+        if len(message) > max_length:
+            violations.append(f"Message too long ({len(message)} > {max_length})")
             penalty += 1.0
 
-        if len(message) < self.rules["min_length"]:
-            violations.append(f"Message too short ({len(message)} < {self.rules['min_length']})")
+        if len(message) < min_length:
+            violations.append(f"Message too short ({len(message)} < {min_length})")
             penalty += 1.0
 
-        # Banned phrases
+        # Disallowed phrases
         message_lower = message.lower()
-        for phrase in self.rules["banned_phrases"]:
+        disallowed = self.rules.get("disallowed_phrases", [])
+        for phrase in disallowed:
             if phrase.lower() in message_lower:
-                violations.append(f"Banned phrase: '{phrase}'")
+                violations.append(f"Disallowed phrase: '{phrase}'")
                 penalty += 2.0
 
         # Quiet hours

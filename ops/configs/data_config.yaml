@@ -1,0 +1,97 @@
+# Data pipeline configuration
+
+# Enable/disable datasets
+enable:
+  telco: true
+  bank: true
+  oasst1: true
+  shp2: true
+  hh: true
+
+# Dataset caps and limits
+caps:
+  oasst1_max_rows: 60000
+  oasst1_valid_rows: 2000
+  prefs_max_pairs: 100000
+  prefs_valid_pairs: 10000
+  prefs_hh_probe: 1000
+  shp2_max: 60000
+  hh_max: 40000
+
+# Text limits
+text_limits:
+  max_prompt_tokens: 1024
+  max_response_tokens: 1024
+  min_text_length: 10
+
+# Data sources
+sources:
+  telco:
+    kaggle_dataset: "blastchar/telco-customer-churn"
+    filename: "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+  
+  bank:
+    # UCI Bank Marketing dataset
+    url: "https://archive.ics.uci.edu/ml/machine-learning-databases/00222/bank-additional.zip"
+    filename: "bank-additional/bank-additional-full.csv"
+  
+  oasst1:
+    hf_dataset: "OpenAssistant/oasst1"
+    split: "train"
+  
+  shp2:
+    hf_dataset: "stanfordnlp/SHP-2"
+    split: "train"
+  
+  hh_rlhf:
+    hf_dataset: "Anthropic/hh-rlhf"
+    split: "train"
+
+# Split ratios
+splits:
+  train: 0.8
+  valid: 0.1
+  test: 0.1
+  seed: 42
+
+# Validation thresholds
+validation:
+  telco:
+    min_rows: 5000
+    churn_rate_min: 0.1
+    churn_rate_max: 0.6
+    required_columns:
+      - customerID
+      - tenure
+      - MonthlyCharges
+      - TotalCharges
+      - Contract
+      - PaymentMethod
+      - Churn
+  
+  bank:
+    min_rows: 30000
+    required_columns:
+      - age
+      - job
+      - marital
+      - education
+      - duration
+      - campaign
+      - y
+      - offer_level
+  
+  oasst1:
+    min_pairs: 1000
+    required_fields:
+      - prompt
+      - response
+  
+  preferences:
+    min_pairs: 10000
+    required_fields:
+      - prompt
+      - chosen
+      - rejected
+      - source
+
