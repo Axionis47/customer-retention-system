@@ -32,7 +32,7 @@ IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/churn-saver-repo/trainer:${EXP
 
 gcloud builds submit \
     --config=ops/cloudbuild_trainer.yaml \
-    --substitutions=_IMAGE_URI=${IMAGE_URI},_EXPERIMENT=${EXPERIMENT} \
+    --substitutions=_IMAGE_URI=${IMAGE_URI} \
     --project=${PROJECT_ID}
 
 echo "✓ Trainer image built and pushed: ${IMAGE_URI}"

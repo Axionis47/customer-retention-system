@@ -1,7 +1,6 @@
 # Cloud Build config for trainer image only
 substitutions:
   _IMAGE_URI: 'us-central1-docker.pkg.dev/${PROJECT_ID}/churn-saver-repo/trainer:latest'
-  _EXPERIMENT: 'exp_001_mvp'
 
 options:
   machineType: 'N1_HIGHCPU_8'
