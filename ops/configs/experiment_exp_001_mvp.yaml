@@ -1,0 +1,311 @@
+# Experiment: exp_001_mvp
+# Purpose: MVP training run with real data under $100 budget
+# Date: 2025-10-01
+# Status: LOCKED - Do not modify without creating new experiment
+
+experiment:
+  name: "exp_001_mvp"
+  description: "MVP training with Telco, Bank, OASST1, SHP-2+HH under $100 budget"
+  seed: 42
+  tags:
+    - mvp
+    - real_data
+    - budget_100
+
+# Global settings
+global:
+  seed: 42
+  device: "cuda"
+  mixed_precision: true
+  gradient_checkpointing: true
+  log_interval: 10
+  save_interval: 100
+  eval_interval: 50
+
+# Data caps (from data_config.yaml)
+data:
+  telco:
+    max_rows: 7032
+    train_split: 0.8
+    valid_split: 0.1
+    test_split: 0.1
+  
+  bank:
+    max_rows: 41188
+    train_split: 0.8
+    valid_split: 0.1
+    test_split: 0.1
+  
+  oasst1:
+    max_rows: 60000
+    valid_rows: 2000
+    max_prompt_tokens: 1024
+    max_response_tokens: 1024
+  
+  preferences:
+    max_pairs: 100000
+    valid_pairs: 10000
+    shp2_max: 60000
+    hh_max: 40000
+
+# Risk model (churn prediction on Telco)
+risk_model:
+  model_type: "xgboost"
+  params:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+  
+  calibration:
+    method: "isotonic"
+    cv_folds: 5
+  
+  exit_criteria:
+    min_auc: 0.78
+    max_ece: 0.05
+  
+  output_path: "models/risk_accept/artifacts/exp_001_mvp_risk_model.pkl"
+
+# Acceptance model (offer acceptance on Bank)
+acceptance_model:
+  model_type: "xgboost"
+  params:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+  
+  calibration:
+    method: "isotonic"
+    cv_folds: 5
+  
+  exit_criteria:
+    min_auc: 0.70
+    max_ece: 0.05
+  
+  output_path: "models/risk_accept/artifacts/exp_001_mvp_accept_model.pkl"
+
+# SFT (Supervised Fine-Tuning on OASST1)
+sft:
+  base_model: "facebook/opt-350m"  # Small model for budget
+  max_steps: 2000
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-5
+  warmup_steps: 100
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  
+  lora:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules: ["q_proj", "v_proj"]
+  
+  quantization:
+    load_in_8bit: true
+  
+  output_path: "checkpoints/exp_001_mvp_sft"
+  
+  exit_criteria:
+    max_loss: 2.5
+    min_eval_samples: 100
+
+# Reward Model (on SHP-2 + HH-RLHF preferences)
+reward_model:
+  base_model: "facebook/opt-350m"
+  max_steps: 1000
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 1.0e-5
+  warmup_steps: 50
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  
+  lora:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules: ["q_proj", "v_proj"]
+  
+  quantization:
+    load_in_8bit: true
+  
+  output_path: "checkpoints/exp_001_mvp_rm"
+  
+  exit_criteria:
+    min_auc: 0.70
+    min_accuracy: 0.65
+
+# PPO Text (RLHF message generation)
+ppo_text:
+  sft_model_path: "checkpoints/exp_001_mvp_sft"
+  reward_model_path: "checkpoints/exp_001_mvp_rm"
+  
+  total_iters: 200
+  batch_size: 4
+  mini_batch_size: 2
+  gradient_accumulation_steps: 2
+  
+  learning_rate: 1.0e-6
+  kl_target: 0.15
+  kl_coef: 0.1
+  adaptive_kl: true
+  
+  generation:
+    max_new_tokens: 180
+    temperature: 0.9
+    top_p: 0.95
+    do_sample: true
+  
+  reward_shaping:
+    safety_weight: 2.0
+    brevity_weight: 0.5
+    rm_weight: 1.0
+  
+  output_path: "checkpoints/exp_001_mvp_ppo_text"
+  
+  exit_criteria:
+    min_win_rate_vs_sft: 0.08  # +8pp
+    max_safety_violations: 0.01  # <1%
+    max_avg_tokens: 162  # -10% from 180
+
+# PPO Decision (Lagrangian-PPO for contact/offer decisions)
+ppo_decision:
+  risk_model_path: "models/risk_accept/artifacts/exp_001_mvp_risk_model.pkl"
+  accept_model_path: "models/risk_accept/artifacts/exp_001_mvp_accept_model.pkl"
+  
+  total_iters: 300
+  steps_per_iter: 2048
+  batch_size: 64
+  mini_batch_size: 64
+  epochs_per_iter: 10
+  
+  learning_rate: 3.0e-4
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  clip_range_vf: 0.2
+  entropy_coef: 0.01
+  value_coef: 0.5
+  max_grad_norm: 0.5
+  
+  lagrangian:
+    budget_limit: 1000.0
+    contact_limit: 0.3
+    penalty_lr: 0.01
+    penalty_init: 1.0
+  
+  environment:
+    n_customers: 1000
+    episode_length: 30
+    discount_levels: [0.0, 0.05, 0.1, 0.2]
+    fatigue_decay: 0.9
+  
+  output_path: "checkpoints/exp_001_mvp_ppo_decision"
+  
+  exit_criteria:
+    min_nrr_improvement: 0.03  # +3% vs best baseline
+    min_cost_reduction: 0.05  # -5% vs best baseline
+    max_violations: 0.001  # <0.1%
+    max_fatigue_overcap: 0.01  # <1%
+
+# Baselines for comparison
+baselines:
+  propensity_threshold:
+    threshold: 0.4
+    fixed_offer: 0.1  # 10%
+  
+  thompson_sampling:
+    offers: [0.0, 0.05, 0.1, 0.2]
+    alpha_prior: 1.0
+    beta_prior: 1.0
+  
+  uplift_tree:
+    max_depth: 5
+    min_samples_leaf: 100
+
+# Evaluation
+evaluation:
+  metrics:
+    - "nrr"  # Net Revenue Retention
+    - "offer_cost"
+    - "contact_rate"
+    - "constraint_violations"
+    - "fatigue_overcap"
+  
+  confidence_interval: 0.95
+  n_bootstrap: 1000
+  
+  plots:
+    - "learning_curves"
+    - "constraint_violations"
+    - "action_entropy"
+    - "nrr_vs_baselines"
+    - "cost_vs_baselines"
+    - "rm_auc_roc"
+    - "win_rate_bar"
+    - "kl_trace"
+    - "safety_probe"
+
+# Cost guardrails
+cost:
+  max_budget_usd: 100
+  instance_type: "n1-standard-4-l4"  # L4 GPU
+  preemptible: true
+  checkpoint_interval_min: 5
+  auto_stop_on_convergence: true
+  
+  estimates:
+    risk_accept_training: 5  # $5 CPU
+    sft_training: 30  # $30 GPU
+    rm_training: 15  # $15 GPU
+    ppo_text_training: 30  # $30 GPU
+    ppo_decision_training: 10  # $10 CPU
+    total_estimated: 90  # $90 total
+
+# Artifacts
+artifacts:
+  base_path: "gs://churn-saver-models/exp_001_mvp"
+  local_cache: "models/exp_001_mvp"
+  
+  files:
+    - "risk_model.pkl"
+    - "accept_model.pkl"
+    - "sft_adapter"
+    - "rm_adapter"
+    - "ppo_text_adapter"
+    - "ppo_decision_policy.pt"
+    - "metrics.json"
+    - "plots/"
+    - "logs/"
+
+# Monitoring (for API integration)
+monitoring:
+  shadow_mode:
+    enabled: true
+    log_decisions: true
+    log_messages: true
+    log_scores: true
+  
+  canary:
+    enabled: false
+    traffic_percent: 5
+    duration_hours: 24
+  
+  alerts:
+    error_rate_threshold: 0.01  # 1%
+    latency_p95_ms: 500
+    safety_violation_rate: 0.005  # 0.5%
+    nrr_drop_threshold: 0.03  # 3pp
+  
+  auto_rollback:
+    enabled: true
+    alert_duration_min: 10
+    action: "set_force_baseline_true"
+

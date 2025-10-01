@@ -58,22 +58,46 @@ docker-build:
 e2e:
 	$(ACTIVATE) && pytest -q tests/e2e/test_docker_smoke.py -v
 
-train-risk:
-	$(ACTIVATE) && python models/risk_accept/train_churn.py
-	$(ACTIVATE) && python models/risk_accept/train_accept.py
-	$(ACTIVATE) && python models/risk_accept/calibrate.py
+# Training targets for exp_001_mvp
+train.risk:
+	@echo "Training churn risk model on Telco data..."
+	$(ACTIVATE) && python models/risk_accept/train_churn.py \
+		--config ops/configs/experiment_exp_001_mvp.yaml
 
-train-ppo:
-	$(ACTIVATE) && python agents/ppo_policy.py --config ops/configs/ppo.yaml
+train.accept:
+	@echo "Training offer acceptance model on Bank data..."
+	$(ACTIVATE) && python models/risk_accept/train_accept.py \
+		--config ops/configs/experiment_exp_001_mvp.yaml
 
-train-sft:
-	$(ACTIVATE) && python rlhf/sft_train.py --config ops/configs/sft.yaml
+train.sft:
+	@echo "Training SFT model on OASST1 data..."
+	$(ACTIVATE) && python rlhf/sft_train.py \
+		--config ops/configs/experiment_exp_001_mvp.yaml
 
-train-rm:
-	$(ACTIVATE) && python rlhf/rm_train.py --config ops/configs/rm.yaml
+train.rm:
+	@echo "Training reward model on preference data..."
+	$(ACTIVATE) && python rlhf/rm_train.py \
+		--config ops/configs/experiment_exp_001_mvp.yaml
 
-train-ppo-text:
-	$(ACTIVATE) && python rlhf/ppo_text.py --config ops/configs/ppo_text.yaml
+train.ppo.text:
+	@echo "Training PPO text generation (RLHF)..."
+	$(ACTIVATE) && python rlhf/ppo_text.py \
+		--config ops/configs/experiment_exp_001_mvp.yaml
+
+train.ppo.decision:
+	@echo "Training PPO decision policy..."
+	$(ACTIVATE) && python agents/ppo_policy.py \
+		--config ops/configs/experiment_exp_001_mvp.yaml
+
+train.all: train.risk train.accept train.sft train.rm train.ppo.text train.ppo.decision
+	@echo "✓ All models trained for exp_001_mvp"
+
+# Legacy targets (kept for backward compatibility)
+train-risk: train.risk
+train-ppo: train.ppo.decision
+train-sft: train.sft
+train-rm: train.rm
+train-ppo-text: train.ppo.text
 
 serve:
 	$(ACTIVATE) && uvicorn serve.app:app --host 0.0.0.0 --port 8080 --reload
