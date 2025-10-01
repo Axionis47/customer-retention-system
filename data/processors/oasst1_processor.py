@@ -96,17 +96,18 @@ def process_oasst1(config: dict, force: bool = False):
     caps = config["caps"]
     max_train = caps["oasst1_max_rows"]
     max_valid = caps["oasst1_valid_rows"]
-    
+
     # Shuffle with fixed seed
     import random
     random.seed(config["splits"]["seed"])
     random.shuffle(pairs)
-    
-    # Split
-    train_pairs = pairs[:max_train]
-    valid_pairs = pairs[max_train:max_train + max_valid]
-    
-    print(f"Capped to: train={len(train_pairs)}, valid={len(valid_pairs)}")
+
+    # Split: first take validation, then training (to ensure we always have validation)
+    total_needed = min(len(pairs), max_train + max_valid)
+    valid_pairs = pairs[:max_valid]
+    train_pairs = pairs[max_valid:total_needed]
+
+    print(f"Split: train={len(train_pairs)}, valid={len(valid_pairs)}")
     
     # Validate
     validation_config = config["validation"]["oasst1"]

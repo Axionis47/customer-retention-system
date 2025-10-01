@@ -67,18 +67,18 @@ bank_test:
   size_bytes: 59093
 oasst1_train:
   path: data/processed/oasst1/sft_train.jsonl
-  rows: 18440
-  checksum_sha256: 2cdec04989bb64dd356b62fc3794860276c604516eb8640b136c6bde43b60e7a
-  last_updated: '2025-10-01T00:36:33.710904Z'
-  size_bytes: 16427964
-  pairs: 18440
+  rows: 16440
+  checksum_sha256: f903dfbdec608a07268bd16eb773fb6f418699e7278d2703a4f96d1c3247ba12
+  last_updated: '2025-10-01T20:37:54.134352Z'
+  size_bytes: 14587442
+  pairs: 16440
 oasst1_valid:
   path: data/processed/oasst1/sft_valid.jsonl
-  rows: 0
-  checksum_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-  last_updated: '2025-10-01T00:36:33.712209Z'
-  size_bytes: 0
-  pairs: 0
+  rows: 2000
+  checksum_sha256: 78d1572242c8e4f1b4d4b5482b95584b402e014997ded046fc8992ff4d1d5593
+  last_updated: '2025-10-01T20:37:54.141691Z'
+  size_bytes: 1840522
+  pairs: 2000
 preferences_train:
   path: data/processed/preferences/pairs.jsonl
   rows: 90000

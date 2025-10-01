@@ -113,12 +113,70 @@ gcloud ai custom-jobs create \
 
 echo "✓ Reward model training job submitted: ${JOB_NAME}"
 
+# Wait for SFT and RM to complete before starting PPO Text
+echo ""
+echo "=================================================="
+echo "Waiting for SFT and RM models to complete..."
+echo "=================================================="
+echo "This ensures PPO Text has the required dependencies"
+
+# Function to wait for a job to complete
+wait_for_job() {
+    local job_pattern=$1
+    local max_wait_seconds=14400  # 4 hours
+    local elapsed=0
+    local check_interval=60  # Check every minute
+
+    echo "Waiting for job matching pattern: ${job_pattern}"
+
+    while [ $elapsed -lt $max_wait_seconds ]; do
+        # Get job state
+        state=$(gcloud ai custom-jobs list \
+            --region=${REGION} \
+            --project=${PROJECT_ID} \
+            --filter="displayName:${job_pattern}" \
+            --format="value(state)" \
+            --sort-by=~createTime \
+            --limit=1)
+
+        if [ "$state" = "JOB_STATE_SUCCEEDED" ]; then
+            echo "✓ Job ${job_pattern} completed successfully"
+            return 0
+        elif [ "$state" = "JOB_STATE_FAILED" ]; then
+            echo "✗ Job ${job_pattern} failed!"
+            return 1
+        elif [ "$state" = "JOB_STATE_CANCELLED" ]; then
+            echo "✗ Job ${job_pattern} was cancelled"
+            return 1
+        fi
+
+        echo "  Job state: ${state}, waiting... (${elapsed}s elapsed)"
+        sleep $check_interval
+        elapsed=$((elapsed + check_interval))
+    done
+
+    echo "✗ Timeout waiting for job ${job_pattern}"
+    return 1
+}
+
+# Wait for SFT model
+wait_for_job "sft-model-${EXPERIMENT}" || {
+    echo "✗ SFT training failed, skipping PPO Text"
+    exit 1
+}
+
+# Wait for RM model
+wait_for_job "rm-model-${EXPERIMENT}" || {
+    echo "✗ RM training failed, skipping PPO Text"
+    exit 1
+}
+
 # Job 5: Train PPO Text (GPU - L4) - Depends on SFT and RM
 echo ""
 echo "=================================================="
 echo "Job 5: Training PPO Text Model (GPU)"
 echo "=================================================="
-echo "Note: This job should start after SFT and RM complete"
+echo "✓ Dependencies met: SFT and RM models are ready"
 JOB_NAME="ppo-text-${EXPERIMENT}-$(date +%Y%m%d-%H%M%S)"
 
 gcloud ai custom-jobs create \
@@ -130,12 +188,28 @@ gcloud ai custom-jobs create \
 
 echo "✓ PPO text training job submitted: ${JOB_NAME}"
 
+# Wait for Risk and Accept models before starting PPO Decision
+echo ""
+echo "=================================================="
+echo "Waiting for Risk and Accept models to complete..."
+echo "=================================================="
+
+wait_for_job "risk-model-${EXPERIMENT}" || {
+    echo "✗ Risk model training failed, skipping PPO Decision"
+    exit 1
+}
+
+wait_for_job "accept-model-${EXPERIMENT}" || {
+    echo "✗ Accept model training failed, skipping PPO Decision"
+    exit 1
+}
+
 # Job 6: Train PPO Decision (CPU) - Depends on Risk and Accept models
 echo ""
 echo "=================================================="
 echo "Job 6: Training PPO Decision Policy (CPU)"
 echo "=================================================="
-echo "Note: This job should start after Risk and Accept models complete"
+echo "✓ Dependencies met: Risk and Accept models are ready"
 JOB_NAME="ppo-decision-${EXPERIMENT}-$(date +%Y%m%d-%H%M%S)"
 
 gcloud ai custom-jobs create \

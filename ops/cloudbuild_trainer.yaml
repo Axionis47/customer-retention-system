@@ -1,9 +1,9 @@
 # Cloud Build config for trainer image only
 substitutions:
-  _IMAGE_URI: 'us-central1-docker.pkg.dev/${PROJECT_ID}/churn-saver-repo/trainer:latest'
+  _IMAGE_URI: 'us-central1-docker.pkg.dev/plotpointe/churn-saver-repo/trainer:latest'
 
 options:
-  machineType: 'N1_HIGHCPU_8'
+  machineType: 'E2_HIGHCPU_8'
   logging: CLOUD_LOGGING_ONLY
 
 steps:

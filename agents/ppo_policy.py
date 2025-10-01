@@ -1,5 +1,7 @@
 """PPO policy trainer for retention environment."""
 import argparse
+import json
+import pickle
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -11,6 +13,29 @@ import yaml
 
 from env.retention_env import RetentionEnv
 from agents.lagrangian import LagrangianMultipliers
+
+
+def convert_gcs_path(path: str) -> str:
+    """Convert /gcs/ prefix to gs:// for GCS paths."""
+    if path.startswith("/gcs/"):
+        return "gs://" + path[5:]
+    return path
+
+
+def load_model_from_path(model_path: str):
+    """Load a pickled model from local or GCS path."""
+    model_path = convert_gcs_path(model_path)
+
+    if model_path.startswith("gs://"):
+        import gcsfs
+        fs = gcsfs.GCSFileSystem()
+        with fs.open(model_path, 'rb') as f:
+            artifact = pickle.load(f)
+    else:
+        with open(model_path, 'rb') as f:
+            artifact = pickle.load(f)
+
+    return artifact["model"]
 
 
 class PolicyNetwork(nn.Module):
@@ -113,17 +138,56 @@ def compute_gae(
     return advantages, returns
 
 
-def train_ppo(config: Dict):
+def train_ppo(config: Dict, risk_model_path: str = None, accept_model_path: str = None, output_path: str = None):
     """Train PPO policy."""
-    # Environment
+    print("="*60)
+    print("Starting PPO Decision Policy Training")
+    print("="*60)
+
+    # Override paths if provided
+    if risk_model_path:
+        config["risk_model_path"] = risk_model_path
+    if accept_model_path:
+        config["accept_model_path"] = accept_model_path
+    if output_path:
+        config["output_dir"] = output_path
+
+    # Load trained risk and acceptance models
+    print("\nLoading trained models...")
+    if "risk_model_path" in config:
+        print(f"Loading risk model from {config['risk_model_path']}...")
+        risk_model = load_model_from_path(config["risk_model_path"])
+        print("✓ Risk model loaded")
+    else:
+        print("⚠ No risk model path provided, using dummy model")
+        risk_model = None
+
+    if "accept_model_path" in config:
+        print(f"Loading acceptance model from {config['accept_model_path']}...")
+        accept_model = load_model_from_path(config["accept_model_path"])
+        print("✓ Acceptance model loaded")
+    else:
+        print("⚠ No acceptance model path provided, using dummy model")
+        accept_model = None
+
+    # Environment - check if nested or flat config
+    if "environment" in config:
+        env_config = config["environment"]
+    else:
+        # Flat config - use defaults
+        env_config = {}
+
+    print(f"\nCreating environment with trained models...")
     env = RetentionEnv(
-        episode_length=config["env"]["episode_length"],
-        initial_budget=config["env"]["initial_budget"],
-        cooldown_days=config["env"]["cooldown_days"],
-        fatigue_cap=config["env"]["fatigue_cap"],
-        lambda_compliance=config["env"]["lambda_compliance"],
-        lambda_fatigue=config["env"]["lambda_fatigue"],
-        seed=config["seed"],
+        episode_length=env_config.get("episode_length", 30),
+        initial_budget=env_config.get("initial_budget", 1000.0),
+        cooldown_days=env_config.get("cooldown_days", 7),
+        fatigue_cap=env_config.get("fatigue_cap", 3),
+        lambda_compliance=env_config.get("lambda_compliance", 1.0),
+        lambda_fatigue=env_config.get("lambda_fatigue", 1.0),
+        seed=config.get("seed", 42),
+        risk_model=risk_model,  # ✅ PASS TRAINED MODEL!
+        accept_model=accept_model,  # ✅ PASS TRAINED MODEL!
     )
 
     # Observation dimension
@@ -133,17 +197,41 @@ def train_ppo(config: Dict):
 
     # Policy network
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    policy = PolicyNetwork(obs_dim, action_dims, hidden_dim=config["ppo"]["hidden_dim"]).to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=config["ppo"]["learning_rate"])
+    print(f"\nUsing device: {device}")
 
-    # Lagrangian multipliers
+    # Handle both nested (ppo: {...}) and flat config structures
+    if "ppo" in config:
+        ppo_config = config["ppo"]
+    else:
+        # Flat config - use the config directly
+        ppo_config = config
+
+    policy = PolicyNetwork(
+        obs_dim,
+        action_dims,
+        hidden_dim=ppo_config.get("hidden_dim", 128)
+    ).to(device)
+    optimizer = optim.Adam(policy.parameters(), lr=ppo_config.get("learning_rate", 3e-4))
+
+    # Lagrangian multipliers (for future constraint enforcement)
     lagrangian = LagrangianMultipliers(
-        step_size=config["ppo"]["lagrangian_step_size"],
+        step_size=ppo_config.get("lagrangian_step_size", 0.01),
     )
 
-    # Training loop
+    # Training loop - calculate episodes from total_iters if available
+    if "total_iters" in ppo_config:
+        # Experiment config style: total_iters * steps_per_iter / episode_length
+        steps_per_iter = ppo_config.get("steps_per_iter", 2048)
+        episode_length = env_config.get("episode_length", 30)
+        total_steps = ppo_config["total_iters"] * steps_per_iter
+        num_episodes = max(1, total_steps // episode_length)
+    else:
+        num_episodes = ppo_config.get("num_episodes", 100)
+
+    print(f"\nTraining for {num_episodes} episodes...")
+
     total_steps = 0
-    for episode in range(config["ppo"]["num_episodes"]):
+    for episode in range(num_episodes):
         obs, _ = env.reset()
         done = False
 
@@ -181,8 +269,8 @@ def train_ppo(config: Dict):
             rewards,
             values,
             dones,
-            gamma=config["ppo"]["gamma"],
-            gae_lambda=config["ppo"]["gae_lambda"],
+            gamma=ppo_config.get("gamma", 0.99),
+            gae_lambda=ppo_config.get("gae_lambda", 0.95),
         )
 
         # Normalize advantages
@@ -196,13 +284,17 @@ def train_ppo(config: Dict):
         returns_batch = torch.FloatTensor(returns).to(device)
 
         # PPO update
-        for _ in range(config["ppo"]["update_epochs"]):
+        for _ in range(ppo_config.get("update_epochs", 4)):
             _, new_log_probs, entropy, new_values = policy.get_action_and_value(obs_batch, action_batch)
 
             # Policy loss (clipped)
             ratio = torch.exp(new_log_probs - old_log_probs)
             surr1 = ratio * advantages_batch
-            surr2 = torch.clamp(ratio, 1 - config["ppo"]["clip_epsilon"], 1 + config["ppo"]["clip_epsilon"]) * advantages_batch
+            surr2 = torch.clamp(
+                ratio,
+                1 - ppo_config.get("clip_epsilon", 0.2),
+                1 + ppo_config.get("clip_epsilon", 0.2)
+            ) * advantages_batch
             policy_loss = -torch.min(surr1, surr2).mean()
 
             # Value loss
@@ -214,37 +306,83 @@ def train_ppo(config: Dict):
             # Total loss
             loss = (
                 policy_loss
-                + config["ppo"]["value_coef"] * value_loss
-                + config["ppo"]["entropy_coef"] * entropy_loss
+                + ppo_config.get("value_coef", 0.5) * value_loss
+                + ppo_config.get("entropy_coef", 0.01) * entropy_loss
             )
 
             optimizer.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_(policy.parameters(), config["ppo"]["max_grad_norm"])
+            nn.utils.clip_grad_norm_(policy.parameters(), ppo_config.get("max_grad_norm", 0.5))
             optimizer.step()
 
         # Update Lagrangian (placeholder - would track violations across episodes)
         avg_reward = np.mean(rewards)
 
         if episode % 10 == 0:
-            print(f"Episode {episode}, Steps: {total_steps}, Avg Reward: {avg_reward:.2f}")
+            print(f"Episode {episode}/{num_episodes}, Steps: {total_steps}, Avg Reward: {avg_reward:.2f}")
 
     # Save model
-    output_dir = Path(config["output_dir"])
-    output_dir.mkdir(parents=True, exist_ok=True)
-    torch.save(policy.state_dict(), output_dir / "ppo_policy.pth")
-    print(f"Model saved to {output_dir / 'ppo_policy.pth'}")
+    output_dir = convert_gcs_path(config["output_dir"])
+    print(f"\nSaving model to {output_dir}...")
+
+    if output_dir.startswith("gs://"):
+        # For GCS, save locally first then upload
+        local_output = Path("/tmp/ppo_policy")
+        local_output.mkdir(parents=True, exist_ok=True)
+        torch.save(policy.state_dict(), local_output / "ppo_policy.pth")
+
+        # Upload to GCS
+        import gcsfs
+        fs = gcsfs.GCSFileSystem()
+        gcs_path = f"{output_dir}/ppo_policy.pth"
+        with open(local_output / "ppo_policy.pth", 'rb') as src:
+            with fs.open(gcs_path, 'wb') as dst:
+                dst.write(src.read())
+        print(f"✓ Model uploaded to {gcs_path}")
+    else:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        torch.save(policy.state_dict(), output_path / "ppo_policy.pth")
+        print(f"✓ Model saved to {output_path / 'ppo_policy.pth'}")
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="ops/configs/ppo.yaml", help="Config file")
+    parser = argparse.ArgumentParser(description="Train PPO decision policy")
+    parser.add_argument("--config", required=True, help="Path to experiment config YAML")
+    parser.add_argument("--risk-model", default=None, help="Path to trained risk model")
+    parser.add_argument("--accept-model", default=None, help="Path to trained acceptance model")
+    parser.add_argument("--output", default=None, help="Override output directory")
     args = parser.parse_args()
 
-    with open(args.config) as f:
-        config = yaml.safe_load(f)
+    # Load experiment config
+    config_path = convert_gcs_path(args.config)
+    print(f"Loading config from {config_path}...")
 
-    train_ppo(config)
+    if config_path.startswith("gs://"):
+        import gcsfs
+        fs = gcsfs.GCSFileSystem()
+        with fs.open(config_path, 'r') as f:
+            full_config = yaml.safe_load(f)
+    else:
+        with open(config_path) as f:
+            full_config = yaml.safe_load(f)
+
+    # Extract PPO decision config from experiment config
+    if "ppo_decision" in full_config:
+        ppo_config = full_config["ppo_decision"]
+        # Add global settings
+        if "global" in full_config:
+            ppo_config.update(full_config["global"])
+    else:
+        # Assume it's a standalone PPO config
+        ppo_config = full_config
+
+    # Train
+    train_ppo(ppo_config, args.risk_model, args.accept_model, args.output)
+
+    print("\n" + "="*60)
+    print("✓ PPO Decision Policy Training Complete!")
+    print("="*60)
 
 
 if __name__ == "__main__":

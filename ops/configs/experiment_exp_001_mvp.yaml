@@ -175,10 +175,31 @@ ppo_text:
     max_safety_violations: 0.01  # <1%
     max_avg_tokens: 162  # -10% from 180
 
+# PPO Text (message generation with RLHF)
+ppo_text:
+  base_model: "facebook/opt-350m"
+  sft_path: "gs://plotpointe-churn-models/checkpoints/exp_001_mvp_sft"
+  rm_path: "gs://plotpointe-churn-models/checkpoints/exp_001_mvp_rm"
+
+  learning_rate: 1.4e-5
+  batch_size: 16
+  mini_batch_size: 4
+  ppo_epochs: 4
+  max_steps: 1000
+  max_new_tokens: 128
+
+  init_beta: 0.1
+  target_kl: 0.15
+
+  log_interval: 10
+  save_interval: 100
+
+  output_dir: "checkpoints/exp_001_mvp_ppo_text"
+
 # PPO Decision (Lagrangian-PPO for contact/offer decisions)
 ppo_decision:
-  risk_model_path: "models/risk_accept/artifacts/exp_001_mvp_risk_model.pkl"
-  accept_model_path: "models/risk_accept/artifacts/exp_001_mvp_accept_model.pkl"
+  risk_model_path: "gs://plotpointe-churn-models/artifacts/exp_001_mvp_risk_model.pkl"
+  accept_model_path: "gs://plotpointe-churn-models/artifacts/exp_001_mvp_accept_model.pkl"
   
   total_iters: 300
   steps_per_iter: 2048
@@ -206,6 +227,11 @@ ppo_decision:
     episode_length: 30
     discount_levels: [0.0, 0.05, 0.1, 0.2]
     fatigue_decay: 0.9
+    initial_budget: 1000.0
+    cooldown_days: 7
+    fatigue_cap: 3
+    lambda_compliance: 1.0
+    lambda_fatigue: 1.0
   
   output_path: "checkpoints/exp_001_mvp_ppo_decision"
   
