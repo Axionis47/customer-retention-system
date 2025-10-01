@@ -13,7 +13,15 @@ from sklearn.metrics import roc_auc_score, classification_report, brier_score_lo
 
 
 def load_data(train_path: str, valid_path: str, test_path: str) -> tuple:
-    """Load Bank Marketing data from parquet files."""
+    """Load Bank Marketing data from parquet files (local or GCS)."""
+    # Support GCS paths
+    if train_path.startswith("/gcs/"):
+        train_path = "gs://" + train_path[5:]
+    if valid_path.startswith("/gcs/"):
+        valid_path = "gs://" + valid_path[5:]
+    if test_path.startswith("/gcs/"):
+        test_path = "gs://" + test_path[5:]
+
     train_df = pd.read_parquet(train_path)
     valid_df = pd.read_parquet(valid_path)
     test_df = pd.read_parquet(test_path)
@@ -182,8 +190,10 @@ def main():
 
     # Save
     output_path = args.output or exp_config["output_path"]
-    output_dir = Path(output_path).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Handle GCS paths
+    if output_path.startswith("/gcs/"):
+        output_path = "gs://" + output_path[5:]
 
     artifact = {
         "model": calibrated_model,
@@ -193,15 +203,30 @@ def main():
         "experiment": config["experiment"]["name"]
     }
 
-    with open(output_path, "wb") as f:
-        pickle.dump(artifact, f)
+    # Save model
+    if output_path.startswith("gs://"):
+        import gcsfs
+        fs = gcsfs.GCSFileSystem()
+        with fs.open(output_path, "wb") as f:
+            pickle.dump(artifact, f)
+    else:
+        output_dir = Path(output_path).parent
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "wb") as f:
+            pickle.dump(artifact, f)
 
     print(f"\n✓ Model saved to {output_path}")
 
     # Save metrics as JSON
-    metrics_path = output_dir / f"{config['experiment']['name']}_accept_metrics.json"
-    with open(metrics_path, "w") as f:
-        json.dump(metrics, f, indent=2)
+    if output_path.startswith("gs://"):
+        metrics_path = output_path.replace(".pkl", "_metrics.json")
+        with fs.open(metrics_path, "w") as f:
+            f.write(json.dumps(metrics, indent=2))
+    else:
+        output_dir = Path(output_path).parent
+        metrics_path = output_dir / f"{config['experiment']['name']}_accept_metrics.json"
+        with open(metrics_path, "w") as f:
+            json.dump(metrics, f, indent=2)
 
     print(f"✓ Metrics saved to {metrics_path}")
 

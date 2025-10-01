@@ -1,0 +1,33 @@
+# Cloud Build config for trainer image only
+substitutions:
+  _IMAGE_URI: 'us-central1-docker.pkg.dev/${PROJECT_ID}/churn-saver-repo/trainer:latest'
+  _EXPERIMENT: 'exp_001_mvp'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # Build trainer Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-trainer'
+    args:
+      - 'build'
+      - '-f'
+      - 'ops/docker/Dockerfile.trainer'
+      - '-t'
+      - '${_IMAGE_URI}'
+      - '.'
+
+  # Push trainer image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-trainer'
+    args:
+      - 'push'
+      - '${_IMAGE_URI}'
+
+images:
+  - '${_IMAGE_URI}'
+
+timeout: '1200s'  # 20 minutes
+
