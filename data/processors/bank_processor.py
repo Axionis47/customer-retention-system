@@ -1,8 +1,9 @@
 """Process UCI Bank Marketing dataset."""
 import json
+import ssl
+import urllib.request
 import zipfile
 from pathlib import Path
-from urllib.request import urlretrieve
 
 import pandas as pd
 import yaml
@@ -27,7 +28,11 @@ def download_bank(config: dict, force: bool = False) -> Path:
     # Download zip
     if not zip_path.exists() or force:
         print(f"Downloading from {source_config['url']}...")
-        urlretrieve(source_config["url"], zip_path)
+        # Create SSL context that doesn't verify certificates (for UCI repository)
+        ssl_context = ssl._create_unverified_context()
+        with urllib.request.urlopen(source_config["url"], context=ssl_context) as response:
+            with open(zip_path, 'wb') as out_file:
+                out_file.write(response.read())
         print(f"Downloaded to: {zip_path}")
     
     # Extract

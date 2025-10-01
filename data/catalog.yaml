@@ -1,0 +1,105 @@
+telco:
+  path: data/processed/telco/telco.parquet
+  rows: 7032
+  checksum_sha256: e5ab87deba827f24707deeaf3001fcfa97fb6690ba0e74e4f35893a75b9997d7
+  last_updated: '2025-10-01T00:35:13.373492Z'
+  size_bytes: 167619
+  stats:
+    total_rows: 7032
+    train_rows: 5625
+    valid_rows: 703
+    test_rows: 704
+    churn_rate: 0.26578498293515357
+    churn_count: 1869
+telco_train:
+  path: data/processed/telco/telco_train.parquet
+  rows: 5625
+  checksum_sha256: 85795e862b569f0cd1ef4bc422fcf679707b9776ee37f40aca971c500a319c46
+  last_updated: '2025-10-01T00:35:13.375377Z'
+  size_bytes: 136430
+telco_valid:
+  path: data/processed/telco/telco_valid.parquet
+  rows: 703
+  checksum_sha256: 00cdd5d398524de94b04166f34cf2e8d4ab74420d68882f211a8ee50e3652f3c
+  last_updated: '2025-10-01T00:35:13.376529Z'
+  size_bytes: 22558
+telco_test:
+  path: data/processed/telco/telco_test.parquet
+  rows: 704
+  checksum_sha256: 15113501b985d5682fb4f3eee5a73ce764194faf4265fe5c6cbd2c16a2263bc3
+  last_updated: '2025-10-01T00:35:13.377610Z'
+  size_bytes: 22518
+bank:
+  path: data/processed/bank_marketing/bank.parquet
+  rows: 41188
+  checksum_sha256: 5aa2eb069869438ff2641a4d52d44d5edadd8c7564014f1d6469819be21aea95
+  last_updated: '2025-10-01T00:36:08.136161Z'
+  size_bytes: 245095
+  stats:
+    total_rows: 41188
+    train_rows: 32950
+    valid_rows: 4119
+    test_rows: 4119
+    acceptance_rate: 0.11265417111780131
+    accepted_count: 4640
+    offer_level_dist:
+      0: 26651
+      1: 8224
+      2: 6181
+      3: 132
+bank_train:
+  path: data/processed/bank_marketing/bank_train.parquet
+  rows: 32950
+  checksum_sha256: 1e0d6303ca69cf50c09efc27e5307595e4043a1152880194c1402d4e42cb169f
+  last_updated: '2025-10-01T00:36:08.144887Z'
+  size_bytes: 353268
+bank_valid:
+  path: data/processed/bank_marketing/bank_valid.parquet
+  rows: 4119
+  checksum_sha256: 1e16d5ee4482f233841c4219ebf7220dfb88fa96426d4e685a9bb429eb993cd0
+  last_updated: '2025-10-01T00:36:08.147273Z'
+  size_bytes: 59509
+bank_test:
+  path: data/processed/bank_marketing/bank_test.parquet
+  rows: 4119
+  checksum_sha256: 4ce9bc22175c8d32742f45175c548c4f368d64236748632d5759b02719aa7f6b
+  last_updated: '2025-10-01T00:36:08.149640Z'
+  size_bytes: 59093
+oasst1_train:
+  path: data/processed/oasst1/sft_train.jsonl
+  rows: 18440
+  checksum_sha256: 2cdec04989bb64dd356b62fc3794860276c604516eb8640b136c6bde43b60e7a
+  last_updated: '2025-10-01T00:36:33.710904Z'
+  size_bytes: 16427964
+  pairs: 18440
+oasst1_valid:
+  path: data/processed/oasst1/sft_valid.jsonl
+  rows: 0
+  checksum_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  last_updated: '2025-10-01T00:36:33.712209Z'
+  size_bytes: 0
+  pairs: 0
+preferences_train:
+  path: data/processed/preferences/pairs.jsonl
+  rows: 90000
+  checksum_sha256: b5011f1b99b6c4ddce9157bb593c121980033a231fd6e741673369bacca9c104
+  last_updated: '2025-10-01T00:39:15.642208Z'
+  size_bytes: 116802061
+  pairs: 90000
+  source_dist:
+    shp2: 54108
+    hh: 35892
+preferences_valid:
+  path: data/processed/preferences/pairs_valid.jsonl
+  rows: 10000
+  checksum_sha256: 75a26fb76ad4584ee4f6092479988c2ee63df1491228dbb759a2dd1534e868c0
+  last_updated: '2025-10-01T00:39:15.663126Z'
+  size_bytes: 12820470
+  pairs: 10000
+preferences_hh_probe:
+  path: data/processed/preferences/hh_probe.jsonl
+  rows: 1000
+  checksum_sha256: adbb0947b506fc9d0bb3328e23f11b20cc6dd9cd2a6a8c01be8b85490f4cd24d
+  last_updated: '2025-10-01T00:39:15.665365Z'
+  size_bytes: 515449
+  pairs: 1000

@@ -1,0 +1,8 @@
+{
+  "total_rows": 7032,
+  "train_rows": 5625,
+  "valid_rows": 703,
+  "test_rows": 704,
+  "churn_rate": 0.26578498293515357,
+  "churn_count": 1869
+}

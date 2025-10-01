@@ -1,0 +1,14 @@
+{
+  "total_rows": 41188,
+  "train_rows": 32950,
+  "valid_rows": 4119,
+  "test_rows": 4119,
+  "acceptance_rate": 0.11265417111780131,
+  "accepted_count": 4640,
+  "offer_level_dist": {
+    "0": 26651,
+    "1": 8224,
+    "2": 6181,
+    "3": 132
+  }
+}

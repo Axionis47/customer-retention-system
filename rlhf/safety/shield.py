@@ -91,16 +91,18 @@ class SafetyShield:
                 penalty += 2.0
 
         # Quiet hours
-        quiet_start = self.rules["quiet_hours"]["start"]
-        quiet_end = self.rules["quiet_hours"]["end"]
-        if quiet_start > quiet_end:  # Wraps midnight
-            in_quiet_hours = hour >= quiet_start or hour < quiet_end
-        else:
-            in_quiet_hours = quiet_start <= hour < quiet_end
+        quiet_hours = self.rules.get("quiet_hours", {})
+        if quiet_hours:
+            quiet_start = quiet_hours.get("start", 22)
+            quiet_end = quiet_hours.get("end", 8)
+            if quiet_start > quiet_end:  # Wraps midnight
+                in_quiet_hours = hour >= quiet_start or hour < quiet_end
+            else:
+                in_quiet_hours = quiet_start <= hour < quiet_end
 
-        if in_quiet_hours:
-            violations.append(f"Quiet hours violation (hour={hour})")
-            penalty += 0.5
+            if in_quiet_hours:
+                violations.append(f"Quiet hours violation (hour={hour})")
+                penalty += 0.5
 
         # Required elements
         for element in self.rules.get("required_elements", []):
@@ -115,8 +117,9 @@ class SafetyShield:
                 penalty += 5.0
 
         # Toxicity (placeholder - would use real classifier)
+        toxicity_threshold = self.rules.get("toxicity_threshold", 0.7)
         toxicity_score = self._check_toxicity(message)
-        if toxicity_score > self.rules["toxicity_threshold"]:
+        if toxicity_score > toxicity_threshold:
             violations.append(f"Toxicity score too high: {toxicity_score:.2f}")
             penalty += 3.0
 
