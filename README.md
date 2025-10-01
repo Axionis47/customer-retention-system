@@ -47,30 +47,115 @@ What it does:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start (Local)
+## Data & Serving Quickstart
 
 ### What you need
 - Python 3.11
-- Docker (for tests and deployment)
-- GCP account with billing (for cloud deployment)
+- Kaggle account and API credentials
+- Docker (optional, for tests and deployment)
+- GCP account with billing (optional, for cloud deployment)
 
-### Setup
+### 1. Setup Kaggle Credentials
+
+```bash
+# Get your Kaggle API token
+# 1. Go to https://www.kaggle.com/settings/account
+# 2. Click "Create New API Token"
+# 3. Save kaggle.json to ~/.kaggle/kaggle.json
+
+mkdir -p ~/.kaggle
+mv ~/Downloads/kaggle.json ~/.kaggle/
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+### 2. Install Dependencies
+
 ```bash
 make setup
 ```
 
-### Run Tests
+### 3. Download and Process Data
+
+```bash
+# Download and process all datasets
+make data.telco    # IBM Telco Customer Churn from Kaggle
+make data.bank     # UCI Bank Marketing
+make data.sft      # OASST1 for SFT training
+make data.prefs    # SHP-2 + HH-RLHF for reward model
+
+# Or run all at once
+make data.all
+
+# View catalog
+make data.catalog
+```
+
+This creates:
+- `data/processed/telco/telco.parquet` (+ train/valid/test splits)
+- `data/processed/bank_marketing/bank.parquet` (+ splits)
+- `data/processed/oasst1/sft_train.jsonl` and `sft_valid.jsonl`
+- `data/processed/preferences/pairs.jsonl` and `pairs_valid.jsonl`
+- `data/catalog.yaml` with checksums and metadata
+
+### 4. Run Tests
+
 ```bash
 make test          # All tests
 make test-unit     # Only unit tests
 make lint          # Check code quality
 ```
 
-### Run Locally
+### 5. Start the API
+
 ```bash
 make serve
 # API runs at http://localhost:8080
-# Available endpoints: /healthz, /readyz, /retain
+```
+
+### 6. Test the /retain Endpoint
+
+```bash
+# Health check
+curl http://localhost:8080/healthz
+
+# Readiness check
+curl http://localhost:8080/readyz
+
+# Get retention decision
+curl -X POST http://localhost:8080/retain \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_facts": {
+      "tenure": 17,
+      "plan": "Pro",
+      "churn_risk": 0.65,
+      "name": "Sam"
+    },
+    "policy_overrides": {
+      "force_baseline": false
+    },
+    "debug": false
+  }'
+```
+
+Response:
+```json
+{
+  "decision": {
+    "contact": true,
+    "offer_level": 2,
+    "followup_days": 7
+  },
+  "scores": {
+    "p_churn": 0.65,
+    "p_accept": [0.1, 0.2, 0.3, 0.4]
+  },
+  "message": "Hi Sam — thanks for being with us...",
+  "safety": {
+    "violations": 0,
+    "applied_disclaimers": ["Offer valid until end of month"]
+  }
+}
 ```
 
 ### Test API
@@ -89,27 +174,44 @@ curl -X POST http://localhost:8080/retain \
   }'
 ```
 
-## Preparing Data
+## Datasets
 
-### For Local Testing
-```bash
-# Create small demo datasets
-python ops/scripts/prepare_data_local.py
+The system uses 4 real-world datasets:
 
-# Upload to GCS (needs GCP_PROJECT_ID, GCS_DATA_BUCKET set)
-python ops/scripts/upload_to_gcs.py
-```
+### 1. IBM Telco Customer Churn (Kaggle)
+- **Purpose**: Train churn risk model `p_churn(x)`
+- **Source**: Kaggle dataset `blastchar/telco-customer-churn`
+- **Size**: ~7,000 customers
+- **Features**: tenure, monthly charges, contract type, payment method
+- **Target**: Churn (Yes/No)
+- **Output**: `data/processed/telco/telco.parquet` with 80/10/10 splits
 
-### Data Format
+### 2. UCI Bank Marketing
+- **Purpose**: Train offer acceptance model `p_accept(x, offer_level)`
+- **Source**: UCI ML Repository
+- **Size**: ~41,000 contacts
+- **Features**: age, job, education, campaign history
+- **Target**: Accepted offer (yes/no)
+- **Proxy**: `offer_level` (0-3) computed from campaign intensity
+- **Output**: `data/processed/bank_marketing/bank.parquet` with splits
 
-**Churn training data** (`data/churn_train.csv`):
-- `customer_id`, `tenure_months`, `monthly_spend`, `support_tickets`, `contract_type`, `churned` (0/1)
+### 3. OpenAssistant (OASST1)
+- **Purpose**: Supervised fine-tuning (SFT) for message generation
+- **Source**: HuggingFace `OpenAssistant/oasst1`
+- **Size**: Capped at 60k train + 2k valid pairs
+- **Format**: `{prompt, response}` JSONL
+- **Output**: `data/processed/oasst1/sft_train.jsonl`
 
-**Acceptance training data** (`data/accept_train.csv`):
-- `customer_id`, `offer_pct`, `churn_risk`, `tenure_months`, `accepted` (0/1)
+### 4. SHP-2 + HH-RLHF
+- **Purpose**: Preference pairs for reward model training
+- **Sources**:
+  - HuggingFace `stanfordnlp/SHP-2` (~60k pairs)
+  - HuggingFace `Anthropic/hh-rlhf` (~40k pairs)
+- **Size**: Capped at 100k total pairs
+- **Format**: `{prompt, chosen, rejected, source}` JSONL
+- **Output**: `data/processed/preferences/pairs.jsonl`
 
-**RLHF pairs** (`data/rlhf_pairs.jsonl`):
-- `{"prompt": "...", "chosen": "...", "rejected": "..."}`
+All datasets are automatically downloaded, processed, and validated by the data pipeline.
 
 ## Training Models
 
