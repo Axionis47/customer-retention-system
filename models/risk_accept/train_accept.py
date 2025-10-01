@@ -1,45 +1,50 @@
-"""Train offer acceptance prediction model."""
+"""Train offer acceptance prediction model on Bank dataset."""
 import argparse
+import json
 import pickle
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score, classification_report
+import yaml
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.metrics import roc_auc_score, classification_report, brier_score_loss, log_loss
 
 
-def load_data(data_path: str) -> pd.DataFrame:
-    """Load acceptance training data from CSV or GCS."""
-    if data_path.startswith("gs://"):
-        import gcsfs
-        fs = gcsfs.GCSFileSystem()
-        with fs.open(data_path, "r") as f:
-            df = pd.read_csv(f)
-    else:
-        df = pd.read_csv(data_path)
-    return df
+def load_data(train_path: str, valid_path: str, test_path: str) -> tuple:
+    """Load Bank Marketing data from parquet files."""
+    train_df = pd.read_parquet(train_path)
+    valid_df = pd.read_parquet(valid_path)
+    test_df = pd.read_parquet(test_path)
+    return train_df, valid_df, test_df
 
 
 def preprocess(df: pd.DataFrame) -> tuple:
-    """Feature engineering for acceptance prediction."""
-    # Features: offer_pct, churn_risk, tenure_months, monthly_spend
-    feature_cols = ["offer_pct", "churn_risk", "tenure_months", "monthly_spend"]
+    """Feature engineering for Bank Marketing acceptance prediction."""
+    # Use key features from Bank dataset
+    feature_cols = [
+        "age",
+        "campaign",
+        "pdays",
+        "previous",
+        "offer_level"  # Our computed proxy
+    ]
     X = df[feature_cols].values
-    y = df["accepted"].values
+    y = df["y"].values  # Target column in Bank dataset
 
     return X, y, feature_cols
 
 
-def train_model(X_train, y_train, X_val, y_val, seed: int = 42):
-    """Train XGBoost acceptance model."""
+def train_model(X_train, y_train, X_val, y_val, config: dict, seed: int = 42):
+    """Train XGBoost acceptance model with config params."""
+    params = config.get("params", {})
     model = xgb.XGBClassifier(
-        n_estimators=80,
-        max_depth=4,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
+        n_estimators=params.get("n_estimators", 100),
+        max_depth=params.get("max_depth", 6),
+        learning_rate=params.get("learning_rate", 0.1),
+        subsample=params.get("subsample", 0.8),
+        colsample_bytree=params.get("colsample_bytree", 0.8),
         random_state=seed,
         eval_metric="auc",
     )
@@ -48,71 +53,157 @@ def train_model(X_train, y_train, X_val, y_val, seed: int = 42):
         X_train,
         y_train,
         eval_set=[(X_val, y_val)],
-        verbose=False,
+        verbose=True,
     )
 
     return model
 
 
-def evaluate(model, X_test, y_test):
-    """Evaluate model performance."""
-    y_pred_proba = model.predict_proba(X_test)[:, 1]
-    auc = roc_auc_score(y_test, y_pred_proba)
+def calibrate_model(model, X_cal, y_cal, method="isotonic"):
+    """Calibrate model probabilities."""
+    print(f"Calibrating model with {method} method...")
+    calibrated = CalibratedClassifierCV(model, method=method, cv="prefit")
+    calibrated.fit(X_cal, y_cal)
+    return calibrated
 
+
+def compute_ece(y_true, y_pred_proba, n_bins=10):
+    """Compute Expected Calibration Error."""
+    bins = np.linspace(0, 1, n_bins + 1)
+    bin_indices = np.digitize(y_pred_proba, bins) - 1
+    bin_indices = np.clip(bin_indices, 0, n_bins - 1)
+
+    ece = 0.0
+    for i in range(n_bins):
+        mask = bin_indices == i
+        if mask.sum() > 0:
+            bin_acc = y_true[mask].mean()
+            bin_conf = y_pred_proba[mask].mean()
+            bin_weight = mask.sum() / len(y_true)
+            ece += bin_weight * abs(bin_acc - bin_conf)
+
+    return ece
+
+
+def evaluate(model, X_test, y_test, exit_criteria: dict):
+    """Evaluate model performance against exit criteria."""
+    y_pred_proba = model.predict_proba(X_test)[:, 1]
     y_pred = model.predict(X_test)
+
+    # Metrics
+    auc = roc_auc_score(y_test, y_pred_proba)
+    brier = brier_score_loss(y_test, y_pred_proba)
+    logloss = log_loss(y_test, y_pred_proba)
+    ece = compute_ece(y_test, y_pred_proba)
+
     report = classification_report(y_test, y_pred)
 
-    print(f"Acceptance Model AUC: {auc:.4f}")
-    print(report)
+    print(f"\n{'='*60}")
+    print(f"Acceptance Model Evaluation")
+    print(f"{'='*60}")
+    print(f"AUC: {auc:.4f}")
+    print(f"Brier Score: {brier:.4f}")
+    print(f"Log Loss: {logloss:.4f}")
+    print(f"ECE (Expected Calibration Error): {ece:.4f}")
+    print(f"\n{report}")
 
-    return auc
+    # Check exit criteria
+    min_auc = exit_criteria.get("min_auc", 0.70)
+    max_ece = exit_criteria.get("max_ece", 0.05)
+
+    passed = auc >= min_auc and ece <= max_ece
+
+    if passed:
+        print(f"✓ EXIT CRITERIA MET: AUC={auc:.4f} >= {min_auc}, ECE={ece:.4f} <= {max_ece}")
+    else:
+        print(f"✗ EXIT CRITERIA FAILED:")
+        if auc < min_auc:
+            print(f"  - AUC={auc:.4f} < {min_auc}")
+        if ece > max_ece:
+            print(f"  - ECE={ece:.4f} > {max_ece}")
+
+    metrics = {
+        "auc": float(auc),
+        "brier_score": float(brier),
+        "log_loss": float(logloss),
+        "ece": float(ece),
+        "exit_criteria_passed": bool(passed)
+    }
+
+    return metrics
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", default="data/accept_train.csv", help="Path to training data")
-    parser.add_argument("--output", default="models/risk_accept/artifacts", help="Output directory")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--config", default="ops/configs/experiment_exp_001_mvp.yaml", help="Experiment config")
+    parser.add_argument("--train-data", default="data/processed/bank_marketing/bank_train.parquet", help="Training data")
+    parser.add_argument("--valid-data", default="data/processed/bank_marketing/bank_valid.parquet", help="Validation data")
+    parser.add_argument("--test-data", default="data/processed/bank_marketing/bank_test.parquet", help="Test data")
+    parser.add_argument("--output", default=None, help="Output path (overrides config)")
     args = parser.parse_args()
 
+    # Load config
+    with open(args.config) as f:
+        config = yaml.safe_load(f)
+
+    exp_config = config["acceptance_model"]
+    seed = config["global"]["seed"]
+
     # Set seed
-    np.random.seed(args.seed)
+    np.random.seed(seed)
 
     # Load data
-    print(f"Loading data from {args.data}...")
-    df = load_data(args.data)
-    print(f"Loaded {len(df)} samples")
+    print(f"Loading Bank Marketing data...")
+    print(f"  Train: {args.train_data}")
+    print(f"  Valid: {args.valid_data}")
+    print(f"  Test: {args.test_data}")
+
+    train_df, valid_df, test_df = load_data(args.train_data, args.valid_data, args.test_data)
+    print(f"Loaded: train={len(train_df)}, valid={len(valid_df)}, test={len(test_df)}")
 
     # Preprocess
-    X, y, feature_cols = preprocess(df)
+    X_train, y_train, feature_cols = preprocess(train_df)
+    X_valid, y_valid, _ = preprocess(valid_df)
+    X_test, y_test, _ = preprocess(test_df)
 
-    # Split
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=0.3, random_state=args.seed, stratify=y
-    )
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.5, random_state=args.seed, stratify=y_temp
-    )
-
-    print(f"Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
+    print(f"Features: {feature_cols}")
+    print(f"Acceptance rate: train={y_train.mean():.3f}, valid={y_valid.mean():.3f}, test={y_test.mean():.3f}")
 
     # Train
-    print("Training acceptance model...")
-    model = train_model(X_train, y_train, X_val, y_val, seed=args.seed)
+    print("\nTraining offer acceptance model...")
+    model = train_model(X_train, y_train, X_valid, y_valid, exp_config, seed=seed)
+
+    # Calibrate
+    calibrated_model = calibrate_model(model, X_valid, y_valid, method=exp_config["calibration"]["method"])
 
     # Evaluate
-    print("Evaluating on test set...")
-    auc = evaluate(model, X_test, y_test)
+    print("\nEvaluating on test set...")
+    metrics = evaluate(calibrated_model, X_test, y_test, exp_config["exit_criteria"])
 
     # Save
-    output_dir = Path(args.output)
+    output_path = args.output or exp_config["output_path"]
+    output_dir = Path(output_path).parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    model_path = output_dir / "accept_model.pkl"
-    with open(model_path, "wb") as f:
-        pickle.dump({"model": model, "features": feature_cols, "auc": auc}, f)
+    artifact = {
+        "model": calibrated_model,
+        "features": feature_cols,
+        "metrics": metrics,
+        "config": exp_config,
+        "experiment": config["experiment"]["name"]
+    }
 
-    print(f"Model saved to {model_path}")
+    with open(output_path, "wb") as f:
+        pickle.dump(artifact, f)
+
+    print(f"\n✓ Model saved to {output_path}")
+
+    # Save metrics as JSON
+    metrics_path = output_dir / f"{config['experiment']['name']}_accept_metrics.json"
+    with open(metrics_path, "w") as f:
+        json.dump(metrics, f, indent=2)
+
+    print(f"✓ Metrics saved to {metrics_path}")
 
 
 if __name__ == "__main__":

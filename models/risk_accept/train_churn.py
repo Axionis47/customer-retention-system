@@ -141,7 +141,7 @@ def evaluate(model, X_test, y_test, exit_criteria: dict):
         "brier_score": float(brier),
         "log_loss": float(logloss),
         "ece": float(ece),
-        "exit_criteria_passed": passed
+        "exit_criteria_passed": bool(passed)
     }
 
     return metrics
