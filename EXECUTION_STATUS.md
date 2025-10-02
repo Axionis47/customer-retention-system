@@ -1,41 +1,47 @@
 # Execution Status - Live Updates
 
-**Started**: October 1, 2025 at 22:42 UTC  
-**Command**: `./ops/scripts/run_complete_pipeline.sh plotpointe us-central1`
+**Started**: October 2, 2025 at 13:32 UTC
+**Command**: `./ops/scripts/submit_training_jobs.sh plotpointe us-central1`
 
 ---
 
-## 🚀 Pipeline Execution Started
+## 🚀 Final Pipeline Execution
 
-### Step 1: Cleanup ✅ COMPLETE
-- Cancelled 2 old pending jobs (with bugs)
-- Jobs cancelled:
-  - `ppo-text-exp_001_mvp-20251001-221902`
-  - `rm-model-exp_001_mvp-20251001-221901`
+### ✅ Bug Fixed
+**Issue**: SFT and RM jobs failing with torchvision import errors
+**Fix**: Removed torchvision from Docker (not needed for NLP)
+**Commit**: `fix: remove torchvision to resolve transformers import conflicts`
 
-### Step 2: Config Upload ✅ COMPLETE
-- Uploaded `experiment_exp_001_mvp.yaml` to GCS
-- Size: 6.8 KiB
-- Location: `gs://plotpointe-churn-models/configs/`
+### ✅ GitHub Repo Created
+**URL**: https://github.com/Axionis47/customer-retention-system
+**Updates**:
+- Simple README in plain Indian English
+- Added 400+ lines of technical architecture documentation
+- Complete system diagrams
+- Detailed explanation of all 3 ML systems
+- No fancy licenses or contributing guidelines
 
-### Step 3: Docker Build 🔄 IN PROGRESS
-- Build ID: `77d8197f-1892-4418-b6a1-ec480d715d0d`
-- Status: Building...
-- Expected duration: ~15 minutes
-- Monitor at: https://console.cloud.google.com/cloud-build/builds/77d8197f-1892-4418-b6a1-ec480d715d0d?project=359145045403
+### 🔄 Current Status
+
+**Step 1: Docker Build** - IN PROGRESS
+- Build ID: `0b83f802-5670-4622-ba53-4047bae0b507`
+- Status: WORKING
+- Started: 13:32 UTC
+- Expected: ~15 minutes
+- Monitor: https://console.cloud.google.com/cloud-build/builds/0b83f802-5670-4622-ba53-4047bae0b507?project=359145045403
 
 **What's being built**:
 - Base: `nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04`
-- Python 3.11 + PyTorch 2.2.0
-- All fixed training scripts
+- Python 3.11 + PyTorch 2.2.0 (NO torchvision)
+- All dependencies from pyproject.toml
+- Fixed training scripts
 - GCS integration
-- Model validation
 
-### Step 4: Job Submission ⏳ PENDING
-Waiting for Docker build to complete...
+**Step 2: Job Submission** - WAITING
+Will start automatically after Docker build completes
 
-### Step 5: Training ⏳ PENDING
-Will start after jobs are submitted...
+**Step 3: Training** - PENDING
+6 jobs will be submitted with proper dependencies
 
 ---
 
