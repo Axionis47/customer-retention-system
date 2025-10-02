@@ -29,9 +29,7 @@ This system helps reduce customer churn by deciding when to contact customers an
 
 | Metric | Value |
 |--------|-------|
-| **Code** | 6,376 lines of Python |
 | **Tests** | 46 tests, 90%+ coverage |
-| **Documentation** | 4,554 lines |
 | **Training Data** | 166,660 data points |
 | **Models** | 6 trained models |
 | **Training Cost** | ~$90 |
