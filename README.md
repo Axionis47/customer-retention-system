@@ -87,6 +87,8 @@ This system helps reduce customer churn by deciding when to contact customers an
 
 ## Technical Architecture
 
+> **📖 For detailed architecture with diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md)**
+
 This project combines 3 different ML systems working together:
 
 ### System Overview
@@ -806,6 +808,7 @@ Running API: ~$10-30/month (low traffic)
 
 ## Documentation
 
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture with Mermaid diagrams
 - **[PROJECT_HIGHLIGHTS.md](PROJECT_HIGHLIGHTS.md)** - Key achievements and skills demonstrated
 - **[QUICKSTART.md](QUICKSTART.md)** - Quick setup guide
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment instructions
