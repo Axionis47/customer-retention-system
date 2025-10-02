@@ -60,6 +60,8 @@ models/risk_accept/artifacts/*.pkl
 models/risk_accept/artifacts/*.json
 
 # Data
+data/raw/
+data/processed/
 data/*.csv
 data/*.parquet
 !tests/fixtures/*.csv
