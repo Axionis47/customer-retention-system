@@ -17,15 +17,17 @@ RUN apt-get update && apt-get install -y \
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
-# Install PyTorch with CUDA support
-RUN pip install --no-cache-dir torch==2.2.0 torchvision==0.17.0 --index-url https://download.pytorch.org/whl/cu121
+# Upgrade pip first
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA support (without torchvision to avoid conflicts)
+RUN pip install --no-cache-dir torch==2.2.0 --index-url https://download.pytorch.org/whl/cu121
 
 # Copy requirements
 COPY pyproject.toml ./
 
-# Install Python dependencies (including dev)
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e ".[dev]"
+# Install Python dependencies (without dev to reduce conflicts)
+RUN pip install --no-cache-dir -e .
 
 # Copy all code
 COPY . .
