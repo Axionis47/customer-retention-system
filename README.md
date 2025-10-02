@@ -822,14 +822,6 @@ Running API: ~$10-30/month (low traffic)
 - API scales to zero when not used
 - Safety checks run on all generated messages
 
-## Contact
-
-For questions about this project, please open an issue on GitHub.
-
 ---
 
 **Built with**: Python, PyTorch, XGBoost, FastAPI, GCP, Docker, Terraform
-
-**Time Investment**: ~40 hours over 1 week
-
-**Purpose**: Demonstrate production ML engineering skills (data → training → deployment)
